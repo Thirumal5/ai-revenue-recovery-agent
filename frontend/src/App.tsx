@@ -1,80 +1,215 @@
 import React, { useEffect, useState } from 'react';
+import { Sidebar } from './components/Sidebar';
+import { Navbar } from './components/Navbar';
+import { KPICards } from './components/KPICards';
+import { AgentStatus } from './components/AgentStatus';
+import { RecoveryFunnel } from './components/RecoveryFunnel';
+import { Simulator } from './components/Simulator';
+import { RecoveryCasesTable } from './components/RecoveryCasesTable';
+import type { RecoveryCase } from './components/RecoveryCasesTable';
+import { AgentExecutionDrawer } from './components/AgentExecutionDrawer';
+import { ActivityFeed } from './components/ActivityFeed';
+import { Customers } from './components/Customers';
+import { Analytics } from './components/Analytics';
+import { Settings } from './components/Settings';
 
-function App() {
+const API_BASE = 'http://localhost:3001';
+
+export default function App() {
+  const [activeTab, setActiveTab] = useState<'overview' | 'cases' | 'activity' | 'customers' | 'analytics' | 'settings'>('overview');
   const [health, setHealth] = useState<string>('Checking backend...');
+  const [cases, setCases] = useState<RecoveryCase[]>([]);
+  const [loading, setLoading] = useState<boolean>(false);
+  const [processingCaseId, setProcessingCaseId] = useState<string | null>(null);
+  const [selectedCaseId, setSelectedCaseId] = useState<string | null>(null);
+  const [isSimulating, setIsSimulating] = useState<boolean>(false);
 
   useEffect(() => {
-    fetch('http://localhost:3001/api/health')
-      .then(res => res.json())
-      .then(data => setHealth(data.message))
-      .catch(() => setHealth('Backend is not running. Please start it!'));
+    checkHealth();
+    fetchCases();
   }, []);
 
-  const triggerInsufficientFunds = async () => {
+  const checkHealth = () => {
+    fetch(`${API_BASE}/api/health`)
+      .then((res) => res.json())
+      .then((data) => setHealth(data.message))
+      .catch(() => setHealth('Backend is offline. Run `npm run dev` in backend directory.'));
+  };
+
+  const fetchCases = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/cases`);
+      if (res.ok) {
+        const data = await res.json();
+        setCases(data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch cases', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Poll case after webhook triggers background auto-processing
+  const pollCaseProgress = async (caseId: string, attemptsLeft = 10) => {
+    setProcessingCaseId(caseId);
+    try {
+      const res = await fetch(`${API_BASE}/api/cases/${caseId}`);
+      if (res.ok) {
+        const caseData: RecoveryCase = await res.json();
+        await fetchCases();
+
+        if ((caseData.lockedForProcessing || !caseData.actions || caseData.actions.length === 0) && attemptsLeft > 0) {
+          setTimeout(() => pollCaseProgress(caseId, attemptsLeft - 1), 600);
+        } else {
+          setProcessingCaseId(null);
+          setSelectedCaseId(caseId);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to poll case progress', err);
+      setProcessingCaseId(null);
+    }
+  };
+
+  // Webhook Simulator trigger
+  const triggerSimulator = async (eventType: string, riskReason: string, amount: number) => {
+    setIsSimulating(true);
     try {
       const fakeWebhook = {
-        type: 'payment.failed',
+        type: eventType,
         payload: {
           payment: {
             entity: {
-              amount: 5000,
-              error_code: "BAD_REQUEST_ERROR",
-              error_description: "Insufficient funds",
-              contact: "+919876543210",
-              email: "test@example.com"
-            }
-          }
-        }
+              amount: amount * 100, // paise
+              error_code: 'BAD_REQUEST_ERROR',
+              error_description: riskReason,
+              contact: '+919876543210',
+              email: `user_${Math.floor(Math.random() * 1000)}@example.com`,
+            },
+          },
+        },
       };
 
-      const response = await fetch('http://localhost:3001/webhooks/simulator', {
+      const response = await fetch(`${API_BASE}/webhooks/simulator`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(fakeWebhook)
+        body: JSON.stringify(fakeWebhook),
       });
 
       const data = await response.json();
-
-      if (response.ok) {
-        alert(`Simulated: Insufficient Funds!\nBackend created Recovery Case ID: ${data.caseId}`);
+      if (response.ok && data.caseId) {
+        await fetchCases();
+        pollCaseProgress(data.caseId);
       } else {
         alert(`Error from backend: ${data.error}`);
       }
     } catch (error) {
-      alert("Failed to send event to backend. Make sure the backend is running!");
+      alert('Failed to connect to backend.');
+    } finally {
+      setIsSimulating(false);
     }
   };
 
+  // Manual trigger for debugging/demo override
+  const runAgentManually = async (caseId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setProcessingCaseId(caseId);
+
+    try {
+      const res = await fetch(`${API_BASE}/api/cases/${caseId}/process`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      if (res.ok) {
+        await fetchCases();
+        setSelectedCaseId(caseId);
+      }
+    } catch (err: any) {
+      alert(`Agent execution failed: ${err.message}`);
+    } finally {
+      setProcessingCaseId(null);
+    }
+  };
+
+  const selectedCase = cases.find((c) => c.id === selectedCaseId) || null;
+
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col items-center p-8">
-      <div className="text-center mb-8">
-        <h1 className="text-4xl font-bold text-gray-900 mb-2">RecoverXAI</h1>
-        <p className="text-gray-500">Revenue Recovery Dashboard</p>
+    <div className="min-h-screen bg-[#F8FAFC] text-slate-950 flex antialiased font-sans">
+      {/* Left Sidebar */}
+      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} health={health} />
+
+      {/* Main Content Workspace */}
+      <div className="flex-1 flex flex-col min-w-0">
+        <Navbar activeTab={activeTab} setActiveTab={setActiveTab} health={health} cases={cases} />
+
+        <main className="p-8 max-w-[1400px] w-full mx-auto overflow-y-auto">
+          {/* Tab 1: Overview */}
+          {activeTab === 'overview' && (
+            <>
+              <KPICards cases={cases} />
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                <AgentStatus
+                  totalCasesProcessed={cases.length}
+                  lastActivityTime={cases.length > 0 ? cases[0].createdAt : undefined}
+                />
+                <RecoveryFunnel cases={cases} />
+              </div>
+              <Simulator onTrigger={triggerSimulator} isSimulating={isSimulating} />
+              <RecoveryCasesTable
+                cases={cases}
+                loading={loading}
+                selectedCaseId={selectedCaseId}
+                processingCaseId={processingCaseId}
+                onSelectCase={(id) => setSelectedCaseId(id)}
+                onRunAgent={runAgentManually}
+                onRefresh={fetchCases}
+              />
+            </>
+          )}
+
+          {/* Tab 2: Recovery Cases */}
+          {activeTab === 'cases' && (
+            <>
+              <Simulator onTrigger={triggerSimulator} isSimulating={isSimulating} />
+              <RecoveryCasesTable
+                cases={cases}
+                loading={loading}
+                selectedCaseId={selectedCaseId}
+                processingCaseId={processingCaseId}
+                onSelectCase={(id) => setSelectedCaseId(id)}
+                onRunAgent={runAgentManually}
+                onRefresh={fetchCases}
+              />
+            </>
+          )}
+
+          {/* Tab 3: Agent Activity */}
+          {activeTab === 'activity' && (
+            <ActivityFeed cases={cases} />
+          )}
+
+          {/* Tab 4: Customers */}
+          {activeTab === 'customers' && (
+            <Customers apiBase={API_BASE} onSelectCase={(id) => setSelectedCaseId(id)} />
+          )}
+
+          {/* Tab 5: Analytics */}
+          {activeTab === 'analytics' && (
+            <Analytics apiBase={API_BASE} />
+          )}
+
+          {/* Tab 6: Settings */}
+          {activeTab === 'settings' && (
+            <Settings apiBase={API_BASE} />
+          )}
+        </main>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8 w-full max-w-4xl">
-        <div className="bg-white rounded-2xl shadow-sm p-6 border border-gray-100">
-          <h2 className="text-lg font-semibold mb-4 text-gray-700">System Status</h2>
-          <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 flex items-center gap-3">
-            <div className={`w-3 h-3 rounded-full animate-pulse ${health.includes('running') ? 'bg-green-500' : 'bg-red-500'}`}></div>
-            <p className="text-gray-900 font-medium">{health}</p>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-2xl shadow-sm p-6 border border-gray-100">
-          <h2 className="text-lg font-semibold mb-4 text-gray-700">Payment Simulator (Phase 3A)</h2>
-          <div className="flex flex-col gap-3">
-            <button
-              onClick={triggerInsufficientFunds}
-              className="px-4 py-3 bg-red-50 text-red-700 border border-red-100 hover:bg-red-100 rounded-lg text-sm font-medium transition-colors text-left cursor-pointer"
-            >
-              Simulate: Insufficient Funds
-            </button>
-          </div>
-        </div>
-      </div>
+      {/* Execution Trace Drawer (Slide-Over) */}
+      <AgentExecutionDrawer recoveryCase={selectedCase} onClose={() => setSelectedCaseId(null)} />
     </div>
   );
 }
-
-export default App;

@@ -15,24 +15,30 @@ model Customer {
 }
 
 model RecoveryCase {
-  id             String        @id @default(uuid())
-  customerId     String
-  customer       Customer      @relation(fields: [customerId], references: [id])
-  type           String        // e.g., "PAYMENT_FAILURE", "CHECKOUT_ABANDONMENT"
-  amount         Float
-  status         String        @default("OPEN") // "OPEN", "RECOVERED", "FAILED", "ESCALATED"
-  riskReason     String        // e.g., "Insufficient funds"
-  actions        AgentAction[]
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
+  id                    String        @id @default(uuid())
+  customerId            String
+  customer              Customer      @relation(fields: [customerId], references: [id])
+  type                  String        // Clean category: "payment_failure", "subscription_failure", "checkout_abandonment", "invoice_overdue"
+  amount                Float
+  status                String        @default("OPEN") // "OPEN", "RECOVERED", "CLOSED_NO_RECOVERY", "ESCALATED"
+  riskReason            String        // Raw reason from webhook: e.g., "Insufficient funds"
+  subReason             String?       // Classifier output: "insufficient_funds", "card_expired", "upi_cap_exceeded", "unknown_reason"
+  attemptCount          Int           @default(0)
+  lastContactedAt       DateTime?
+  lockedForProcessing   Boolean       @default(false)
+  razorpayPaymentLinkId String?       // Stores real Razorpay link ID when created
+  actions               AgentAction[]
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
 }
 
 model AgentAction {
   id             String       @id @default(uuid())
   caseId         String
   case           RecoveryCase @relation(fields: [caseId], references: [id])
-  actionType     String       // e.g., "SEND_EMAIL", "RETRY_PAYMENT"
+  actionType     String       // e.g., "EVENT_CLASSIFIED", "AI_DECISION", "SAFETY_CHECK", "TOOL_EXECUTED"
   aiReasoning    String       // e.g., "Customer needs time to top up account"
-  status         String       // "SUCCESS", "FAILED"
+  status         String       // "SUCCESS", "FAILED", "BLOCKED"
+  metadata       String?      // JSON string for tool-specific result data (Razorpay responses, message content, etc.)
   timestamp      DateTime     @default(now())
 }
