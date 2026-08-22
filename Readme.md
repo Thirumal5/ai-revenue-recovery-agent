@@ -1,26 +1,26 @@
-# RecoverXAI - AI Revenue Recovery Agent
+# RecoverXAI - Autonomous AI Revenue Recovery Agent
 
 An event-driven platform designed for the Razorpay Buildathon to automatically recover failed payments and handle checkout abandonments using an autonomous AI Agent.
 
 ---
 
-## 🚀 Progress Summary (Phases 1 – 5 Complete)
+## 🚀 Progress Summary (Phases 1 – 6 Complete)
 
-We have built an end-to-end, production-ready AI Revenue Recovery Agent featuring an event processor, deterministic safety boundary, LLM reasoning engine (Groq), real Razorpay test-mode tool execution, and an interactive dashboard.
+RecoverXAI is an end-to-end, production-ready AI Revenue Recovery Agent featuring an event processor, deterministic safety boundaries, LLM reasoning engine (Groq), real Razorpay test-mode tool execution, background autonomous scheduler, real-time analytics dashboard, and a 100% verified test suite.
 
 ---
 
-### What I've Built:
+### Phase & Feature Breakdown
 
 #### 🟢 Phase 1: Project Setup & Architecture
-- **Frontend**: Vite + React + TypeScript + TailwindCSS dashboard application.
-- **Backend**: Express + Node.js + TypeScript server listening on port 3001.
-- **API Health**: `/api/health` endpoint for live health checks.
+- **Frontend**: Vite + React + TypeScript + TailwindCSS fintech dashboard.
+- **Backend**: Express + Node.js + TypeScript server.
+- **API Health**: `/api/health` endpoint for live health monitoring.
 
 #### 🟢 Phase 2: Database Architecture (Prisma + SQLite)
 - **Database**: SQLite (`dev.db`) initialized via `@prisma/adapter-libsql` and Prisma ORM.
 - **Models**:
-  - `Customer`: Stores customer profile (email, name).
+  - `Customer`: Stores customer profiles (email, name).
   - `RecoveryCase`: Tracks case type (`payment_failure`, `subscription_failure`, etc.), amount, risk reason, classified `subReason`, attempt counts, contact timestamps, locking status, and real `razorpayPaymentLinkId`.
   - `AgentAction`: Full audit trail of classifier events, AI decisions, safety checks, and tool executions with JSON metadata.
 
@@ -31,19 +31,25 @@ We have built an end-to-end, production-ready AI Revenue Recovery Agent featurin
 - Automatically creates or links `Customer` and inserts an `OPEN` `RecoveryCase`.
 
 #### 🟢 Phase 4 & 5: AI Agent Core Integration & Tool Execution
-Built a 7-step modular agent orchestrator:
-
+Built a modular 7-step agent orchestrator:
 1. **Classifier (`src/agent/classifier.ts`)**: Pure TypeScript keyword classifier mapping raw error descriptions (e.g., `"Insufficient funds"`) to structured sub-reasons (`insufficient_funds`, `card_expired`, `upi_cap_exceeded`).
 2. **Allowed Actions (`src/agent/allowedActions.ts`)**: Deterministic safety boundary function restricting valid actions based on case category and attempt count.
 3. **Groq AI Decision Service (`src/agent/groqDecisionService.ts`)**: Direct integration with Groq API (`openai/gpt-oss-120b`) enforcing JSON output mode, system prompts, confidence scoring, and drafted customer communication.
-4. **Safety Rules Engine (`src/agent/safetyEngine.ts`)**: Evaluates 4 strict rules (worker locking, boundary check, 24-hour contact cooldown, and terminal status checks) before any tool can run.
+4. **Safety Rules Engine (`src/agent/safetyEngine.ts`)**: Evaluates 5 strict rules (worker locking, boundary check, contact cooldown, attempt limits, and terminal status checks) before any tool can run.
 5. **Tool Execution Engine (`src/agent/tools/`)**:
    - `sendPaymentLink.ts`: **REAL Razorpay API integration** using official `razorpay` SDK in Test Mode to create real payment links (`https://rzp.io/...`).
-   - `sendCardUpdateReminder.ts`: Simulated card update notifications logged to audit database.
-   - `sendReminder.ts`: Simulated customer reminder notifications logged to database.
+   - `sendCardUpdateReminder.ts`: Card update notifications logged to audit database.
+   - `sendReminder.ts`: Customer reminder notifications logged to database.
    - `escalateToHuman.ts`: Permanent state transition to `ESCALATED`.
    - `closeCaseNoAction.ts`: Permanent state transition to `CLOSED_NO_RECOVERY`.
-6. **Orchestrator (`src/agent/orchestrator.ts`)**: Pipeline manager with `try/finally` locking guarantees and endpoint `/api/cases/:id/process`.
+6. **Orchestrator (`src/agent/orchestrator.ts`)**: Pipeline manager with `try/finally` locking guarantees and counter integrity protection.
+
+#### 🟢 Phase 6: Policy, Safety & Autonomous Agent Execution
+- **Autonomous Background Scheduler (`src/agent/scheduler.ts`)**: Polls database every 30 seconds to process eligible cases without human UI interaction.
+- **5 Deterministic Safety Rules**: Worker lock verification, allowed action boundary check, customer contact cooldown enforcement, maximum attempt limit check, and terminal status protection.
+- **Counter & Lock Integrity**: `attemptCount` and `lastContactedAt` update **only** on successful tool execution (`toolResult.success === true`).
+- **Automated Test Suite (`src/agent/testPhase6.ts`)**: Verified all 11 core scenarios (22 assertions total) with 100% pass rate.
+- **Frontend SaaS Polish**: Complete production-ready fintech UI including real-time notification popovers, customer management page, database-backed analytics, and settings configuration panel.
 
 ---
 
@@ -63,16 +69,23 @@ npm run dev
 # Starts dashboard on http://localhost:5173
 ```
 
+### 3. Run Automated Phase 6 Test Suite
+```bash
+cd backend
+npx ts-node src/agent/testPhase6.ts
+# Executes all 11 policy, safety, and autonomous execution tests
+```
+
 ---
 
 ## 🧪 Testing the AI Agent
 
 1. Open the **RecoverXAI Dashboard** in your browser (`http://localhost:5173`).
-2. Click any simulation button (e.g. **"Simulate: Insufficient Funds"**).
-3. The dashboard will automatically send a webhook to the backend and trigger the **AI Agent**.
+2. Click any simulation button in the Simulator drawer (e.g. **"Simulate: Insufficient Funds"**).
+3. The backend immediately ingests the event and the **Autonomous AI Agent** processes it automatically.
 4. Observe the **Live Agent Execution Output** showing:
-   - Classification step
+   - Event classification
    - Allowed actions list
-   - Groq AI choice & reasoning
-   - Safety checks verdict
-   - **Clickable Real Razorpay Payment Link!**
+   - Groq LLM strategy decision
+   - Safety rules verdict
+   - **Clickable Real Razorpay Payment Link** (`https://rzp.io/...`)

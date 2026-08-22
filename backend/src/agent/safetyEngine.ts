@@ -16,6 +16,8 @@ interface CaseForSafety {
   lockedForProcessing: boolean;
   lastContactedAt: Date | null;
   status: string;
+  attemptCount?: number;
+  type?: string;
 }
 
 interface DecisionForSafety {
@@ -29,6 +31,13 @@ const CONTACT_ACTIONS = [
 ];
 
 const TERMINAL_STATUSES = ['RECOVERED', 'CLOSED_NO_RECOVERY', 'ESCALATED'];
+
+const MAX_CONTACT_ATTEMPTS: Record<string, number> = {
+  payment_failure: 2,
+  subscription_failure: 3,
+  checkout_abandonment: 2,
+  invoice_overdue: 3,
+};
 
 export function checkSafetyRules(
   caseRecord: CaseForSafety,
@@ -56,7 +65,15 @@ export function checkSafetyRules(
     }
   }
 
-  // 4. Terminal Status Check
+  // 4. Attempt Limit Safety Check (Applies ONLY to customer-contact actions)
+  if (CONTACT_ACTIONS.includes(aiDecision.chosen_action) && caseRecord.attemptCount !== undefined && caseRecord.type) {
+    const maxAllowed = MAX_CONTACT_ATTEMPTS[caseRecord.type] || 2;
+    if (caseRecord.attemptCount >= maxAllowed) {
+      return { approved: false, reason: `maximum attempt limit reached (${caseRecord.attemptCount}/${maxAllowed})` };
+    }
+  }
+
+  // 5. Terminal Status Check
   if (TERMINAL_STATUSES.includes(caseRecord.status)) {
     return { approved: false, reason: 'case already resolved' };
   }

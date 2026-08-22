@@ -25,6 +25,8 @@ model RecoveryCase {
   subReason             String?       // Classifier output: "insufficient_funds", "card_expired", "upi_cap_exceeded", "unknown_reason"
   attemptCount          Int           @default(0)
   lastContactedAt       DateTime?
+  lastObservedAt        DateTime?     // Phase 8: Timestamp of last autonomous observation
+  observationOutcome    String?       // Phase 8: "RECOVERED", "STILL_OPEN", "ACTION_FAILED", "MAX_ATTEMPTS_REACHED", "WAITING", "TERMINAL"
   lockedForProcessing   Boolean       @default(false)
   razorpayPaymentLinkId String?       // Stores real Razorpay link ID when created
   actions               AgentAction[]
@@ -36,9 +38,9 @@ model AgentAction {
   id             String       @id @default(uuid())
   caseId         String
   case           RecoveryCase @relation(fields: [caseId], references: [id])
-  actionType     String       // e.g., "EVENT_CLASSIFIED", "AI_DECISION", "SAFETY_CHECK", "TOOL_EXECUTED"
+  actionType     String       // "EVENT_CLASSIFIED", "AI_DECISION", "SAFETY_CHECK", "TOOL_EXECUTED", "OBSERVATION"
   aiReasoning    String       // e.g., "Customer needs time to top up account"
   status         String       // "SUCCESS", "FAILED", "BLOCKED"
-  metadata       String?      // JSON string for tool-specific result data (Razorpay responses, message content, etc.)
+  metadata       String?      // JSON string for tool/observation-specific result data
   timestamp      DateTime     @default(now())
 }

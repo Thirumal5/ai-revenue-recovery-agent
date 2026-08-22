@@ -5,8 +5,8 @@
  * through the full agent pipeline:
  *
  * 1. Fetch case → 2. Terminal check & Lock → 3. Classify sub-reason → 4. Get allowed actions
- * → 5. Ask Groq → 6. Safety check → 7. Execute tool → 8. Update counters
- * → 9. Unlock (finally) → 10. Return result
+ * → 5. Ask Groq (with observation history) → 6. Safety check → 7. Execute tool via Dispatcher
+ * → 8. Update counters (on success) → 9. Run Observation Service → 10. Unlock (finally)
  *
  * Uses try/finally to guarantee the lock is always released.
  */
@@ -16,11 +16,8 @@ import { classifyFailureReason } from './classifier';
 import { getAllowedActions } from './allowedActions';
 import { decideRecoveryAction, CaseContext } from './groqDecisionService';
 import { checkSafetyRules } from './safetyEngine';
-import { sendPaymentLink } from './tools/sendPaymentLink';
-import { sendCardUpdateReminder } from './tools/sendCardUpdateReminder';
-import { sendReminder } from './tools/sendReminder';
-import { escalateToHuman } from './tools/escalateToHuman';
-import { closeCaseNoAction } from './tools/closeCaseNoAction';
+import { executeTool } from './toolDispatcher';
+import { observeCaseOutcome } from './observationService';
 
 export interface ProcessResult {
   caseId: string;
@@ -159,14 +156,14 @@ export async function processCase(caseId: string): Promise<ProcessResult> {
     });
     console.log(`🔒 Allowed actions: ${JSON.stringify(allowedActions)}`);
 
-    // 5. Call Groq AI for decision
+    // 5. Call Groq AI for decision (including previous observation outcome)
     const daysSinceFirstEvent = Math.floor(
       (Date.now() - new Date(caseRecord.createdAt).getTime()) / (1000 * 60 * 60 * 24)
     );
 
     const priorActionsSummary = caseRecord.actions.length > 0
       ? caseRecord.actions
-          .filter(a => a.actionType === 'TOOL_EXECUTED')
+          .filter(a => a.actionType === 'TOOL_EXECUTED' || a.actionType === 'OBSERVATION')
           .map(a => `${a.actionType}: ${a.aiReasoning}`)
           .join('; ') || 'No prior tool executions'
       : 'No prior actions';
@@ -180,6 +177,7 @@ export async function processCase(caseId: string): Promise<ProcessResult> {
       priorActionsSummary,
       promiseStatus: 'none',
       allowedActions,
+      previousObservation: caseRecord.observationOutcome || undefined,
     };
 
     const aiDecision = await decideRecoveryAction(context);
@@ -208,9 +206,11 @@ export async function processCase(caseId: string): Promise<ProcessResult> {
     // 6. Safety check
     const safetyVerdict = checkSafetyRules(
       {
-        lockedForProcessing: false, // Lock was verified and acquired at step 2
+        lockedForProcessing: false, // Lock acquired at step 2
         lastContactedAt: caseRecord.lastContactedAt,
         status: caseRecord.status,
+        attemptCount: caseRecord.attemptCount,
+        type: caseRecord.type,
       },
       aiDecision,
       allowedActions
@@ -238,9 +238,18 @@ export async function processCase(caseId: string): Promise<ProcessResult> {
 
     console.log(`🛡️ Safety: ${safetyVerdict.approved ? '✅ APPROVED' : `❌ BLOCKED — ${safetyVerdict.reason}`}`);
 
-    // 7. Execute tool (if approved)
+    // 7. Execute tool via Centralized Dispatcher (ONLY if safety approved)
     if (!safetyVerdict.approved) {
       console.log('⏸️ Tool execution skipped — safety check blocked');
+
+      // Still run observation to log safety blocked status
+      const obsResult = await observeCaseOutcome(caseId);
+      steps.push({
+        step: 'observation',
+        result: obsResult,
+        timestamp: new Date().toISOString(),
+      });
+
       return {
         caseId,
         success: false,
@@ -250,54 +259,29 @@ export async function processCase(caseId: string): Promise<ProcessResult> {
       };
     }
 
-    let toolResult: any;
+    const toolResult = await executeTool(
+      aiDecision.chosen_action,
+      {
+        id: caseRecord.id,
+        amount: caseRecord.amount,
+        razorpayPaymentLinkId: caseRecord.razorpayPaymentLinkId,
+      },
+      {
+        name: caseRecord.customer.name,
+        email: caseRecord.customer.email,
+      },
+      aiDecision
+    );
 
-    switch (aiDecision.chosen_action) {
-      case 'SEND_PAYMENT_LINK':
-        toolResult = await sendPaymentLink(
-          { id: caseRecord.id, amount: caseRecord.amount },
-          { name: caseRecord.customer.name, email: caseRecord.customer.email }
-        );
-        break;
-
-      case 'SEND_CARD_UPDATE_REMINDER':
-        toolResult = await sendCardUpdateReminder(
-          { id: caseRecord.id },
-          aiDecision.customer_message || 'Please update your card details to continue your subscription.'
-        );
-        break;
-
-      case 'SEND_REMINDER':
-        toolResult = await sendReminder(
-          { id: caseRecord.id },
-          aiDecision.customer_message || 'This is a friendly reminder regarding your pending payment.'
-        );
-        break;
-
-      case 'ESCALATE_TO_HUMAN':
-        toolResult = await escalateToHuman(
-          { id: caseRecord.id },
-          aiDecision.reasoning
-        );
-        break;
-
-      case 'CLOSE_NO_ACTION':
-        toolResult = await closeCaseNoAction({ id: caseRecord.id });
-        break;
-
-      default:
-        toolResult = { success: false, error: `Unknown action: ${aiDecision.chosen_action}` };
-    }
-
-    // Log the tool execution
+    // Log the tool execution in AgentAction
     await prisma.agentAction.create({
       data: {
         caseId,
         actionType: 'TOOL_EXECUTED',
-        aiReasoning: `Executed ${aiDecision.chosen_action}: ${toolResult.success ? 'succeeded' : 'failed'}`,
+        aiReasoning: `Executed ${toolResult.tool}: ${toolResult.success ? 'succeeded' : 'failed'}`,
         status: toolResult.success ? 'SUCCESS' : 'FAILED',
         metadata: JSON.stringify({
-          action: aiDecision.chosen_action,
+          action: toolResult.tool,
           result: toolResult,
         }),
       },
@@ -305,12 +289,12 @@ export async function processCase(caseId: string): Promise<ProcessResult> {
 
     steps.push({
       step: 'tool_executed',
-      result: { action: aiDecision.chosen_action, ...toolResult },
+      result: toolResult,
       timestamp: new Date().toISOString(),
     });
 
-    // 8. Update counters (skip for terminal actions)
-    if (!TERMINAL_ACTIONS.includes(aiDecision.chosen_action)) {
+    // 8. Update counters ONLY on successful tool execution for non-terminal actions
+    if (!TERMINAL_ACTIONS.includes(aiDecision.chosen_action) && toolResult.success) {
       await prisma.recoveryCase.update({
         where: { id: caseId },
         data: {
@@ -319,6 +303,14 @@ export async function processCase(caseId: string): Promise<ProcessResult> {
         },
       });
     }
+
+    // 9. Phase 8: Autonomous Observation Loop
+    const observationResult = await observeCaseOutcome(caseId);
+    steps.push({
+      step: 'observation',
+      result: observationResult,
+      timestamp: new Date().toISOString(),
+    });
 
     // Fetch the final case state
     const finalCase = await prisma.recoveryCase.findUnique({
@@ -332,12 +324,13 @@ export async function processCase(caseId: string): Promise<ProcessResult> {
 
     return {
       caseId,
-      success: true,
+      success: toolResult.success,
       steps,
       finalStatus: finalCase?.status || caseRecord.status,
+      error: toolResult.success ? undefined : toolResult.error,
     };
   } finally {
-    // 9. ALWAYS unlock the case in finally block, preserving final status
+    // 10. ALWAYS unlock the case in finally block
     await prisma.recoveryCase.update({
       where: { id: caseId },
       data: { lockedForProcessing: false },

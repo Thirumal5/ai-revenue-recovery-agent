@@ -47,6 +47,12 @@ export const AgentExecutionDrawer: React.FC<AgentExecutionDrawerProps> = ({ reco
     try { toolData = JSON.parse(toolAction.metadata); } catch (e) {}
   }
 
+  const observationAction = actions.find((a) => a.actionType === 'OBSERVATION');
+  let observationData: any = {};
+  if (observationAction?.metadata) {
+    try { observationData = JSON.parse(observationAction.metadata); } catch (e) {}
+  }
+
   const paymentLinkUrl = toolData.result?.paymentLinkUrl || toolData.paymentLinkUrl || (recoveryCase.razorpayPaymentLinkId ? `https://razorpay.com/pay/${recoveryCase.razorpayPaymentLinkId}` : null);
 
   const formattedConfidence = formatConfidence(aiData.confidence);
@@ -70,7 +76,7 @@ export const AgentExecutionDrawer: React.FC<AgentExecutionDrawerProps> = ({ reco
               <span>•</span>
               <span className="font-bold text-slate-900">₹{recoveryCase.amount.toFixed(2)}</span>
               <span>•</span>
-              <span>Payment Failure</span>
+              <span>{recoveryCase.type}</span>
             </div>
           </div>
           <button
@@ -81,7 +87,7 @@ export const AgentExecutionDrawer: React.FC<AgentExecutionDrawerProps> = ({ reco
           </button>
         </div>
 
-        {/* Drawer Body — 6 Step Execution Timeline */}
+        {/* Drawer Body — 7 Step Execution Timeline */}
         <div className="p-6 overflow-y-auto flex-1 space-y-6 text-xs">
           {/* STEP 1: EVENT INGESTION */}
           <div className="flex gap-4">
@@ -182,7 +188,7 @@ export const AgentExecutionDrawer: React.FC<AgentExecutionDrawerProps> = ({ reco
                 <div className="bg-white p-3 rounded-lg border border-slate-200 text-slate-700 text-[11px] mt-2">
                   <div className="font-bold text-slate-900 mb-1">Drafted Message:</div>
                   <div className="text-slate-600 italic">
-                    "{aiData.customer_message || "Hi, we noticed your recent payment couldn't be processed due to insufficient funds. Please complete the payment using the link below. Payment link, Thank you!"}"
+                    "{aiData.customer_message || "Hi, we noticed your recent payment couldn't be processed due to insufficient funds. Please complete the payment using the link below. Thank you!"}"
                   </div>
                 </div>
               </div>
@@ -220,28 +226,62 @@ export const AgentExecutionDrawer: React.FC<AgentExecutionDrawerProps> = ({ reco
               <div className="w-8 h-8 rounded-full bg-purple-50 text-purple-600 flex items-center justify-center font-bold text-sm shadow-2xs">
                 🚀
               </div>
+              <div className="w-0.5 h-full bg-slate-100 my-1"></div>
             </div>
-            <div className="flex-1">
+            <div className="flex-1 pb-2">
               <div className="flex items-center justify-between">
                 <span className="font-mono text-[11px] font-bold text-slate-400 uppercase">STEP 6</span>
                 <span className="text-[10px] text-slate-400 font-mono">13:54:10</span>
               </div>
               <div className="font-extrabold text-slate-950 uppercase tracking-tight text-xs mt-0.5">RAZORPAY TOOL EXECUTION</div>
               <div className="mt-2 flex items-center justify-between">
-                <span className="text-slate-600">Tool: <strong className="font-mono text-slate-900">SEND_PAYMENT_LINK</strong></span>
+                <span className="text-slate-600">Tool: <strong className="font-mono text-slate-900">{toolData.action || toolData.result?.tool || 'SEND_PAYMENT_LINK'}</strong></span>
                 <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded">
-                  EXECUTED
+                  {toolAction?.status === 'SUCCESS' ? 'EXECUTED' : 'FAILED'}
                 </span>
               </div>
-              <div className="mt-4">
-                <a
-                  href={paymentLinkUrl || '#'}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="w-full inline-flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-4 py-2.5 rounded-xl text-xs transition-colors shadow-xs"
-                >
-                  💳 Open Payment Link ↗
-                </a>
+              {paymentLinkUrl && (
+                <div className="mt-3">
+                  <a
+                    href={paymentLinkUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="w-full inline-flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-4 py-2.5 rounded-xl text-xs transition-colors shadow-xs"
+                  >
+                    💳 Open Payment Link ↗
+                  </a>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* STEP 7: AUTONOMOUS OBSERVATION */}
+          <div className="flex gap-4">
+            <div className="flex flex-col items-center">
+              <div className="w-8 h-8 rounded-full bg-cyan-50 text-cyan-600 flex items-center justify-center font-bold text-sm shadow-2xs">
+                👁️
+              </div>
+            </div>
+            <div className="flex-1">
+              <div className="flex items-center justify-between">
+                <span className="font-mono text-[11px] font-bold text-slate-400 uppercase">STEP 7</span>
+                <span className="text-[10px] text-slate-400 font-mono">13:54:11</span>
+              </div>
+              <div className="font-extrabold text-slate-950 uppercase tracking-tight text-xs mt-0.5">AUTONOMOUS OBSERVATION</div>
+              <div className="mt-2 space-y-2 bg-slate-50/70 p-3 rounded-xl border border-slate-100">
+                <div className="flex items-center gap-2">
+                  <span>Outcome:</span>
+                  <span className="bg-cyan-100 text-cyan-800 px-2 py-0.5 rounded font-mono font-bold text-[11px]">
+                    {observationData.outcome || recoveryCase.observationOutcome || 'STILL_OPEN'}
+                  </span>
+                </div>
+                <div className="text-slate-600 italic">
+                  Reason: "{observationData.reason || observationAction?.aiReasoning || 'Case observed post-execution.'}"
+                </div>
+                <div className="flex items-center gap-2 text-[11px] pt-1">
+                  <span>Recommended Next Step:</span>
+                  <span className="font-mono font-bold text-slate-900">{observationData.recommendedNextStep || 'WAIT'}</span>
+                </div>
               </div>
             </div>
           </div>

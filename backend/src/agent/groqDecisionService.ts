@@ -2,10 +2,10 @@
  * Step 4 — Groq Decision Service (Plain fetch, NO LangChain, NO OpenAI SDK)
  *
  * Calls the Groq API directly via fetch to get an AI decision on which
- * recovery action to take. Uses llama-3.3-70b-versatile with JSON mode.
+ * recovery action to take. Supports llama-3.3-70b-versatile and openai/gpt-oss-120b.
  *
  * The AI can ONLY choose from the allowed_actions provided — this is
- * enforced both in the prompt and validated after the response.
+ * enforced both in the prompt and validated after the response. Includes 429 rate limit retry logic.
  */
 
 export interface CaseContext {
@@ -17,6 +17,7 @@ export interface CaseContext {
   priorActionsSummary: string;
   promiseStatus: string;
   allowedActions: string[];
+  previousObservation?: string;
 }
 
 export interface AIDecision {
@@ -53,6 +54,7 @@ amount: ${context.amount}
 attempt_count_so_far: ${context.attemptCount}
 days_since_first_event: ${context.daysSinceFirstEvent}
 prior_actions_summary: ${context.priorActionsSummary}
+previous_observation_outcome: ${context.previousObservation || 'First attempt - no prior observation'}
 promise_to_pay_status: ${context.promiseStatus}
 
 allowed_actions: ${JSON.stringify(context.allowedActions)}
@@ -69,6 +71,7 @@ const FALLBACK_DECISION: AIDecision = {
 
 export async function decideRecoveryAction(context: CaseContext): Promise<AIDecision> {
   const apiKey = process.env.GROQ_API_KEY;
+  const modelName = process.env.GROQ_MODEL || 'openai/gpt-oss-120b';
 
   if (!apiKey) {
     console.error('❌ GROQ_API_KEY is not set in .env');
@@ -76,14 +79,14 @@ export async function decideRecoveryAction(context: CaseContext): Promise<AIDeci
   }
 
   try {
-    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    let response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: 'openai/gpt-oss-120b',
+        model: modelName,
         messages: [
           { role: 'system', content: SYSTEM_PROMPT },
           { role: 'user', content: buildUserPrompt(context) },
@@ -93,6 +96,28 @@ export async function decideRecoveryAction(context: CaseContext): Promise<AIDeci
         max_tokens: 512,
       }),
     });
+
+    if (response.status === 429) {
+      console.warn('⚠️ Groq API rate limit hit (429). Waiting 1000ms before retry...');
+      await new Promise((r) => setTimeout(r, 1000));
+      response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: modelName,
+          messages: [
+            { role: 'system', content: SYSTEM_PROMPT },
+            { role: 'user', content: buildUserPrompt(context) },
+          ],
+          response_format: { type: 'json_object' },
+          temperature: 0.3,
+          max_tokens: 512,
+        }),
+      });
+    }
 
     if (!response.ok) {
       const errorText = await response.text();

@@ -41,7 +41,7 @@ export const ActivityFeed: React.FC<ActivityFeedProps> = ({ cases }) => {
     <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden mb-6">
       <div className="px-5 py-4 border-b border-slate-200 bg-slate-50/50">
         <h3 className="font-bold text-slate-900 text-sm tracking-tight uppercase">Agent Activity Audit Log</h3>
-        <p className="text-xs text-slate-500">Real-time chronological log of autonomous AI decisions and tool executions</p>
+        <p className="text-xs text-slate-500">Real-time chronological log of autonomous AI decisions, tool executions, and observation cycles</p>
       </div>
 
       {activities.length === 0 ? (
@@ -51,6 +51,11 @@ export const ActivityFeed: React.FC<ActivityFeedProps> = ({ cases }) => {
           {activities.map((act) => {
             const timeStr = new Date(act.timestamp).toLocaleTimeString();
             const dateStr = new Date(act.timestamp).toLocaleDateString();
+
+            const isObservation = act.actionType === 'OBSERVATION';
+            const actionBadgeClass = isObservation
+              ? 'bg-cyan-100 text-cyan-800 border border-cyan-200'
+              : 'bg-slate-100 text-slate-700';
 
             return (
               <div key={act.id} className="p-4 hover:bg-slate-50/60 transition-colors flex items-start gap-4 text-xs">
@@ -62,7 +67,7 @@ export const ActivityFeed: React.FC<ActivityFeedProps> = ({ cases }) => {
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-1">
                     <span className="font-mono font-bold text-indigo-600">RCV-{act.caseId.slice(0, 8)}</span>
-                    <span className="bg-slate-100 text-slate-700 px-1.5 py-0.2 rounded font-mono font-bold text-[10px]">
+                    <span className={`px-1.5 py-0.2 rounded font-mono font-bold text-[10px] ${actionBadgeClass}`}>
                       {act.actionType}
                     </span>
                     <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded ${
