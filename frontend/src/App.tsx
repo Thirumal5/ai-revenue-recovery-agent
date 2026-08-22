@@ -10,29 +10,62 @@ function App() {
       .catch(() => setHealth('Backend is not running. Please start it!'));
   }, []);
 
-  return (
-    <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4">
-      <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8 border border-gray-100 text-center">
-        
-        <div className="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-6">
-          <svg className="w-8 h-8 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-          </svg>
-        </div>
+  const triggerInsufficientFunds = async () => {
+    try {
+      const fakeWebhook = {
+        type: 'payment.failed',
+        payload: {
+          payment: {
+            entity: {
+              amount: 5000,
+              error_code: "BAD_REQUEST_ERROR",
+              error_description: "Insufficient funds",
+              contact: "+919876543210",
+              email: "test@example.com"
+            }
+          }
+        }
+      };
 
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">
-          AI Agent
-        </h1>
-        <p className="text-gray-500 mb-8">Revenue Recovery Dashboard</p>
-        
-        <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
-          <p className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-2">Backend Connection</p>
-          <div className="flex items-center justify-center gap-2">
+      await fetch('http://localhost:3000/webhooks/simulator', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(fakeWebhook)
+      });
+
+      alert("Simulated: Insufficient Funds \nCheck your backend terminal!");
+    } catch (error) {
+      alert("Failed to send event to backend!");
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-50 flex flex-col items-center p-8">
+      <div className="text-center mb-8">
+        <h1 className="text-4xl font-bold text-gray-900 mb-2">RecoverXAI</h1>
+        <p className="text-gray-500">Revenue Recovery Dashboard</p>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-8 w-full max-w-4xl">
+        <div className="bg-white rounded-2xl shadow-sm p-6 border border-gray-100">
+          <h2 className="text-lg font-semibold mb-4 text-gray-700">System Status</h2>
+          <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 flex items-center gap-3">
             <div className={`w-3 h-3 rounded-full animate-pulse ${health.includes('running') ? 'bg-green-500' : 'bg-red-500'}`}></div>
             <p className="text-gray-900 font-medium">{health}</p>
           </div>
         </div>
 
+        <div className="bg-white rounded-2xl shadow-sm p-6 border border-gray-100">
+          <h2 className="text-lg font-semibold mb-4 text-gray-700">Payment Simulator (Phase 3A)</h2>
+          <div className="flex flex-col gap-3">
+            <button
+              onClick={triggerInsufficientFunds}
+              className="px-4 py-3 bg-red-50 text-red-700 border border-red-100 hover:bg-red-100 rounded-lg text-sm font-medium transition-colors text-left cursor-pointer"
+            >
+              Simulate: Insufficient Funds
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );

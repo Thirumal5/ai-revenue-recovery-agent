@@ -1,0 +1,38 @@
+datasource db {
+  provider = "sqlite"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Customer {
+  id        String         @id @default(uuid())
+  email     String         @unique
+  name      String
+  cases     RecoveryCase[]
+  createdAt DateTime       @default(now())
+}
+
+model RecoveryCase {
+  id             String        @id @default(uuid())
+  customerId     String
+  customer       Customer      @relation(fields: [customerId], references: [id])
+  type           String        // e.g., "PAYMENT_FAILURE", "CHECKOUT_ABANDONMENT"
+  amount         Float
+  status         String        @default("OPEN") // "OPEN", "RECOVERED", "FAILED", "ESCALATED"
+  riskReason     String        // e.g., "Insufficient funds"
+  actions        AgentAction[]
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+}
+
+model AgentAction {
+  id             String       @id @default(uuid())
+  caseId         String
+  case           RecoveryCase @relation(fields: [caseId], references: [id])
+  actionType     String       // e.g., "SEND_EMAIL", "RETRY_PAYMENT"
+  aiReasoning    String       // e.g., "Customer needs time to top up account"
+  status         String       // "SUCCESS", "FAILED"
+  timestamp      DateTime     @default(now())
+}
