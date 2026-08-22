@@ -4,7 +4,7 @@ function App() {
   const [health, setHealth] = useState<string>('Checking backend...');
 
   useEffect(() => {
-    fetch('http://localhost:3000/api/health')
+    fetch('http://localhost:3001/api/health')
       .then(res => res.json())
       .then(data => setHealth(data.message))
       .catch(() => setHealth('Backend is not running. Please start it!'));
@@ -27,15 +27,21 @@ function App() {
         }
       };
 
-      await fetch('http://localhost:3000/webhooks/simulator', {
+      const response = await fetch('http://localhost:3001/webhooks/simulator', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(fakeWebhook)
       });
 
-      alert("Simulated: Insufficient Funds \nCheck your backend terminal!");
+      const data = await response.json();
+
+      if (response.ok) {
+        alert(`Simulated: Insufficient Funds!\nBackend created Recovery Case ID: ${data.caseId}`);
+      } else {
+        alert(`Error from backend: ${data.error}`);
+      }
     } catch (error) {
-      alert("Failed to send event to backend!");
+      alert("Failed to send event to backend. Make sure the backend is running!");
     }
   };
 
