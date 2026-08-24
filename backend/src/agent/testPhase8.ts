@@ -43,6 +43,7 @@ async function runPhase8TestSuite() {
 
   // Clean up previous test cases in DB before test run
   await prisma.agentAction.deleteMany({});
+  await prisma.messageLog.deleteMany({});
   await prisma.recoveryCase.deleteMany({});
 
   // Create clean test customer
@@ -115,7 +116,7 @@ async function runPhase8TestSuite() {
       type: 'payment_failure',
       amount: 4500,
       status: 'OPEN',
-      attemptCount: 2,
+      attemptCount: 3,
       lastContactedAt: new Date(Date.now() - 300000), // past cooldown
       riskReason: 'Max attempts reached case',
     },

@@ -1,20 +1,23 @@
 import { prisma } from '../../lib/prisma';
 import { ProviderFactory } from '../providers/providerFactory';
 
-interface ReminderResult {
+export interface SuggestAlternativePaymentResult {
   success: boolean;
-  simulated: boolean;
   messageContent: string;
+  simulatedChannel: string;
   providerMessageId?: string;
-  channel: string;
 }
 
-export async function sendCardUpdateReminder(
+export async function suggestAlternativePayment(
   caseRecord: { id: string },
   customer: { email: string; phone?: string | null },
-  messageText: string,
+  customMessage?: string,
   preferredChannel: 'EMAIL' | 'SMS' | 'WHATSAPP' = 'EMAIL'
-): Promise<ReminderResult> {
+): Promise<SuggestAlternativePaymentResult> {
+  const messageContent =
+    customMessage ||
+    'Your payment could not be completed with the current payment method. You can try using an alternative payment method (e.g., UPI, Netbanking, or another card) to complete your transaction.';
+
   const recipient = (preferredChannel === 'EMAIL' ? customer.email : customer.phone) || customer.email || '+15005550006';
 
 
@@ -24,8 +27,8 @@ export async function sendCardUpdateReminder(
     caseId: caseRecord.id,
     recipient: recipient!,
     channel: preferredChannel,
-    subject: 'Card Update Reminder',
-    bodyText: messageText,
+    subject: 'Alternative Payment Method Suggestion',
+    bodyText: messageContent,
   });
 
 
@@ -33,28 +36,27 @@ export async function sendCardUpdateReminder(
     data: {
       caseId: caseRecord.id,
       actionType: 'TOOL_EXECUTED',
-      aiReasoning: `Card update reminder dispatched via ${dispatchResult.provider} (${preferredChannel})`,
+      aiReasoning: `Alternative payment suggestion dispatched via ${dispatchResult.provider} (${preferredChannel})`,
       status: dispatchResult.success ? 'SUCCESS' : 'FAILED',
       metadata: JSON.stringify({
-        tool: 'SEND_CARD_UPDATE_REMINDER',
+        tool: 'SUGGEST_ALTERNATIVE_PAYMENT',
         channel: preferredChannel,
         provider: dispatchResult.provider,
         providerMessageId: dispatchResult.providerMessageId,
         isSimulated: dispatchResult.isSimulated,
-        messageContent: messageText,
+        messageContent,
         sentAt: new Date().toISOString(),
       }),
     },
   });
 
-  console.log(`📧 [${dispatchResult.provider}] Card update reminder sent via ${preferredChannel} for case ${caseRecord.id}`);
+  console.log(`💡 [${dispatchResult.provider}] Alternative payment suggestion sent via ${preferredChannel} for case ${caseRecord.id}`);
 
   return {
     success: dispatchResult.success,
-    simulated: dispatchResult.isSimulated,
-    messageContent: messageText,
+    messageContent,
+    simulatedChannel: preferredChannel,
     providerMessageId: dispatchResult.providerMessageId,
-    channel: preferredChannel,
   };
 }
 

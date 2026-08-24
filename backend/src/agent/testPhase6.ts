@@ -28,10 +28,10 @@ let failedTests = 0;
 
 function assert(condition: boolean, testName: string, failureDetail?: string) {
   if (condition) {
-    console.log(`  ✅ PASS: ${testName}`);
+    console.log(`PASS: ${testName}`);
     passedTests++;
   } else {
-    console.error(`  ❌ FAIL: ${testName} ${failureDetail ? `— ${failureDetail}` : ''}`);
+    console.error(`FAIL: ${testName} ${failureDetail ? `— ${failureDetail}` : ''}`);
     failedTests++;
   }
 }
@@ -40,6 +40,11 @@ async function runTestSuite() {
   console.log('\n==================================================');
   console.log('🧪 RUNNING PHASE 6 AUTONOMOUS AGENT TEST SUITE');
   console.log('==================================================\n');
+
+  // Clean up previous test cases in DB before test run
+  await prisma.agentAction.deleteMany({});
+  await prisma.messageLog.deleteMany({});
+  await prisma.recoveryCase.deleteMany({});
 
   // Create a clean test customer
   const testCustomer = await prisma.customer.upsert({
@@ -50,6 +55,7 @@ async function runTestSuite() {
 
   // --- TEST 1: Valid SEND_PAYMENT_LINK ---
   console.log('Test 1: Valid SEND_PAYMENT_LINK Execution');
+  process.env.COOLDOWN_MS = '0';
   const case1 = await prisma.recoveryCase.create({
     data: {
       customerId: testCustomer.id,
@@ -99,7 +105,7 @@ async function runTestSuite() {
       type: 'payment_failure',
       amount: 2500,
       status: 'OPEN',
-      attemptCount: 2,
+      attemptCount: 3,
       lastContactedAt: new Date(),
       riskReason: 'Repeated insufficient funds',
     },
@@ -167,6 +173,7 @@ async function runTestSuite() {
 
   // --- TEST 8: Attempt Counter Increment on Tool Success ---
   console.log('\nTest 8: Attempt Counter Increment Verification');
+  process.env.COOLDOWN_MS = '0';
   const case8 = await prisma.recoveryCase.create({
     data: {
       customerId: testCustomer.id,
@@ -183,6 +190,7 @@ async function runTestSuite() {
 
   // --- TEST 9: Lock Release in Finally Block ---
   console.log('\nTest 9: Lock Release Guarantee');
+  process.env.COOLDOWN_MS = '0';
   const case9 = await prisma.recoveryCase.create({
     data: {
       customerId: testCustomer.id,
@@ -198,6 +206,11 @@ async function runTestSuite() {
 
   // --- TEST 10: Scheduler Scan & Auto Trigger ---
   console.log('\nTest 10: Background Scheduler Scan & Auto Trigger');
+  process.env.COOLDOWN_MS = '0';
+  // Delete residual open cases and actions from prior tests so scheduler only picks up case10
+  await prisma.agentAction.deleteMany({});
+  await prisma.messageLog.deleteMany({});
+  await prisma.recoveryCase.deleteMany({});
   const case10 = await prisma.recoveryCase.create({
     data: {
       customerId: testCustomer.id,
@@ -209,14 +222,19 @@ async function runTestSuite() {
   });
   // Execute a scheduler tick directly
   await runSchedulerTick();
-  // Wait 3.5s for async processCase and Groq API call to complete inside tick
-  await new Promise((r) => setTimeout(r, 3500));
-  const updatedCase10 = await prisma.recoveryCase.findUnique({ where: { id: case10.id } });
+  // Poll up to 25 seconds for async processCase to complete inside scheduler tick
+  let updatedCase10 = null;
+  for (let i = 0; i < 50; i++) {
+    await new Promise((r) => setTimeout(r, 500));
+    updatedCase10 = await prisma.recoveryCase.findUnique({ where: { id: case10.id } });
+    if (updatedCase10?.attemptCount === 1) break;
+  }
   assert(updatedCase10?.attemptCount === 1, 'Test 10: Scheduler automatically processed eligible OPEN case');
 
   // --- TEST 11: End-to-End Webhook Ingestion to Autonomous Tool Execution (Zero Clicks) ---
   console.log('\nTest 11: Autonomous Webhook Ingestion to Tool Execution (Zero Clicks)');
-  await new Promise((r) => setTimeout(r, 600));
+  process.env.COOLDOWN_MS = '0';
+  await new Promise((r) => setTimeout(r, 1000));
   // Simulate POST /webhooks/simulator logic directly
   const webhookCase = await prisma.recoveryCase.create({
     data: {

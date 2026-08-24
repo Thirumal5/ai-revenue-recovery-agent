@@ -2,10 +2,12 @@
  * Step 4 — Groq Decision Service (Plain fetch, NO LangChain, NO OpenAI SDK)
  *
  * Calls the Groq API directly via fetch to get an AI decision on which
- * recovery action to take. Supports llama-3.3-70b-versatile and openai/gpt-oss-120b.
+ * recovery action to take. Primary model: openai/gpt-oss-120b.
+ * Includes automatic model fallback across active Groq models
+ * (openai/gpt-oss-20b, groq/compound-mini) with exponential backoff to handle rate limits (429).
  *
  * The AI can ONLY choose from the allowed_actions provided — this is
- * enforced both in the prompt and validated after the response. Includes 429 rate limit retry logic.
+ * enforced both in the prompt and validated after the response.
  */
 
 export interface CaseContext {
@@ -32,10 +34,11 @@ const SYSTEM_PROMPT = `You are the decision-making component inside a Revenue Re
 STRICT RULES YOU MUST FOLLOW:
 1. You may ONLY choose an action from the "allowed_actions" list given to you. Never invent a new action or suggest anything outside that list.
 2. You do not decide whether an action is safe to execute — a separate rules engine will check that. Your job is only to pick the best-fit action for the situation described.
-3. If the context given to you is unclear, contradictory, or you are not confident any listed action is appropriate, you MUST choose "ESCALATE_TO_HUMAN" instead of guessing.
-4. Never draft a message that threatens the customer, implies legal action, promises a discount/refund, or uses urgent/aggressive language.
-5. Never draft a B2B message that sounds threatening or unprofessional.
-6. You must respond with ONLY a single valid JSON object, matching exactly the schema below. No explanation text outside the JSON. No markdown code fences.
+3. Learn from prior actions and previous observation outcomes. If a prior action (e.g. SEND_PAYMENT_LINK) was already executed and the case remains STILL_OPEN, do NOT repeat that exact same action if another safe recovery action (e.g. SEND_REMINDER or SUGGEST_ALTERNATIVE_PAYMENT) is available in allowed_actions. Diversify the recovery strategy before resorting to ESCALATE_TO_HUMAN.
+4. If the context given to you is unclear, contradictory, or you are not confident any listed action is appropriate, you MUST choose "ESCALATE_TO_HUMAN" (or "CLOSE_NO_ACTION" if allowed for cart abandonment) instead of guessing.
+5. Never draft a message that threatens the customer, implies legal action, promises a discount/refund, or uses urgent/aggressive language.
+6. Draft empathetic, clear, and action-oriented messages tailored to the failure reason (e.g. for insufficient funds, suggest retrying or using an alternative payment method; for card expired, prompt updating card details).
+7. You must respond with ONLY a single valid JSON object, matching exactly the schema below. No explanation text outside the JSON. No markdown code fences.
 
 RESPONSE SCHEMA:
 {
@@ -46,11 +49,11 @@ RESPONSE SCHEMA:
 }`;
 
 function buildUserPrompt(context: CaseContext): string {
-  return `Here is the current case you must decide on:
+  return `Here is the current case context and history you must decide on:
 
 case_type: ${context.caseType}
 sub_reason: ${context.subReason}
-amount: ${context.amount}
+amount: ₹${context.amount}
 attempt_count_so_far: ${context.attemptCount}
 days_since_first_event: ${context.daysSinceFirstEvent}
 prior_actions_summary: ${context.priorActionsSummary}
@@ -59,103 +62,121 @@ promise_to_pay_status: ${context.promiseStatus}
 
 allowed_actions: ${JSON.stringify(context.allowedActions)}
 
-Choose the single best-fit action from allowed_actions for this specific case, and draft the customer_message if the chosen action requires one. Respond with ONLY the JSON object per the schema in the system prompt.`;
+Analyze the failure sub_reason, attempt count, and prior actions. Choose the single best-fit action from allowed_actions for this specific case. If a prior action was already tried and the case remains STILL_OPEN, prefer a DIFFERENT allowed recovery strategy (e.g., SEND_REMINDER or SUGGEST_ALTERNATIVE_PAYMENT) before choosing ESCALATE_TO_HUMAN. Draft an appropriate customer_message if the action contacts the customer. Respond with ONLY the JSON object per the schema in the system prompt.`;
 }
 
-const FALLBACK_DECISION: AIDecision = {
-  chosen_action: 'ESCALATE_TO_HUMAN',
-  confidence: 'low',
-  reasoning: 'AI response invalid or unparseable',
-  customer_message: null,
-};
+function getFallbackDecision(context: CaseContext, reasoning: string): AIDecision {
+  // Deterministic strategy fallback: pick the first allowed action that hasn't already been tried if available
+  let chosenAction = context.allowedActions && context.allowedActions.length > 0
+    ? context.allowedActions[0]
+    : 'ESCALATE_TO_HUMAN';
+
+  if (context.allowedActions && context.allowedActions.length > 1 && context.priorActionsSummary) {
+    const untried = context.allowedActions.find(
+      (act) => act !== 'ESCALATE_TO_HUMAN' && !context.priorActionsSummary.includes(act)
+    );
+    if (untried) {
+      chosenAction = untried;
+    }
+  }
+
+  return {
+    chosen_action: chosenAction,
+    confidence: 'low',
+    reasoning,
+    customer_message: null,
+  };
+}
 
 export async function decideRecoveryAction(context: CaseContext): Promise<AIDecision> {
   const apiKey = process.env.GROQ_API_KEY;
-  const modelName = process.env.GROQ_MODEL || 'openai/gpt-oss-120b';
+  const primaryModel = process.env.GROQ_MODEL || 'openai/gpt-oss-120b';
+  const candidateModels = Array.from(new Set([primaryModel, 'openai/gpt-oss-20b', 'groq/compound-mini']));
 
   if (!apiKey) {
     console.error('❌ GROQ_API_KEY is not set in .env');
-    return { ...FALLBACK_DECISION, reasoning: 'GROQ_API_KEY not configured' };
+    return getFallbackDecision(context, 'GROQ_API_KEY not configured');
   }
 
-  try {
-    let response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: modelName,
-        messages: [
-          { role: 'system', content: SYSTEM_PROMPT },
-          { role: 'user', content: buildUserPrompt(context) },
-        ],
-        response_format: { type: 'json_object' },
-        temperature: 0.3,
-        max_tokens: 512,
-      }),
-    });
-
-    if (response.status === 429) {
-      console.warn('⚠️ Groq API rate limit hit (429). Waiting 1000ms before retry...');
-      await new Promise((r) => setTimeout(r, 1000));
-      response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          model: modelName,
-          messages: [
-            { role: 'system', content: SYSTEM_PROMPT },
-            { role: 'user', content: buildUserPrompt(context) },
-          ],
-          response_format: { type: 'json_object' },
-          temperature: 0.3,
-          max_tokens: 512,
-        }),
-      });
-    }
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`❌ Groq API error (${response.status}):`, errorText);
-      return { ...FALLBACK_DECISION, reasoning: `Groq API returned ${response.status}` };
-    }
-
-    const data = await response.json();
-    const content = data.choices?.[0]?.message?.content;
-
-    if (!content) {
-      console.error('❌ Groq API returned empty content');
-      return { ...FALLBACK_DECISION, reasoning: 'Groq returned empty content' };
-    }
-
-    // Parse the JSON response
-    let decision: AIDecision;
+  for (const modelName of candidateModels) {
     try {
-      decision = JSON.parse(content);
-    } catch {
-      console.error('❌ Failed to parse Groq response as JSON:', content);
-      return { ...FALLBACK_DECISION, reasoning: 'AI response was not valid JSON' };
+      let response: Response | null = null;
+      const maxRetries = 3;
+
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`,
+          },
+          body: JSON.stringify({
+            model: modelName,
+            messages: [
+              { role: 'system', content: SYSTEM_PROMPT },
+              { role: 'user', content: buildUserPrompt(context) },
+            ],
+            response_format: { type: 'json_object' },
+            temperature: 0.3,
+            max_tokens: 512,
+          }),
+        });
+
+        if (response.status === 429 && attempt < maxRetries) {
+          const waitMs = attempt * 1500;
+          console.warn(`⚠️ Groq API 429 on model ${modelName}. Retry ${attempt}/${maxRetries} in ${waitMs}ms...`);
+          await new Promise((r) => setTimeout(r, waitMs));
+        } else {
+          break;
+        }
+      }
+
+      if (response && response.status === 429) {
+        console.warn(`⚠️ Model ${modelName} rate limited. Trying fallback candidate model...`);
+        continue;
+      }
+
+      if (!response || !response.ok) {
+        const errorText = response ? await response.text() : 'No response';
+        console.error(`❌ Groq API error (${response?.status}) on model ${modelName}:`, errorText);
+        continue;
+      }
+
+      const data = await response.json();
+      const content = data.choices?.[0]?.message?.content;
+
+      if (!content) {
+        console.error(`❌ Groq API returned empty content for model ${modelName}`);
+        continue;
+      }
+
+      // Parse the JSON response
+      let decision: AIDecision;
+      try {
+        decision = JSON.parse(content);
+      } catch {
+        console.error(`❌ Failed to parse Groq response as JSON (${modelName}):`, content);
+        continue;
+      }
+
+      // Validate chosen_action is in the allowed list
+      if (!context.allowedActions.includes(decision.chosen_action)) {
+        console.error(`❌ AI (${modelName}) chose "${decision.chosen_action}" which is not in allowed actions: ${JSON.stringify(context.allowedActions)}`);
+        return getFallbackDecision(
+          context,
+          `AI chose "${decision.chosen_action}" which is not in the allowed actions list`
+        );
+      }
+
+      console.log(`🤖 AI Decision (${modelName}): ${decision.chosen_action} (${decision.confidence}) — ${decision.reasoning}`);
+
+      return decision;
+    } catch (error: any) {
+      console.error(`❌ Groq API call failed for model ${modelName}:`, error.message);
+      continue;
     }
-
-    // Validate chosen_action is in the allowed list
-    if (!context.allowedActions.includes(decision.chosen_action)) {
-      console.error(`❌ AI chose "${decision.chosen_action}" which is not in allowed actions: ${JSON.stringify(context.allowedActions)}`);
-      return {
-        ...FALLBACK_DECISION,
-        reasoning: `AI chose "${decision.chosen_action}" which is not in the allowed actions list`,
-      };
-    }
-
-    console.log(`🤖 AI Decision: ${decision.chosen_action} (${decision.confidence}) — ${decision.reasoning}`);
-
-    return decision;
-  } catch (error: any) {
-    console.error('❌ Groq API call failed:', error.message);
-    return { ...FALLBACK_DECISION, reasoning: `Groq API call failed: ${error.message}` };
   }
+
+  // If all candidate models failed or were rate-limited, return deterministic policy fallback
+  return getFallbackDecision(context, 'All Groq AI models rate-limited — using deterministic policy fallback');
 }

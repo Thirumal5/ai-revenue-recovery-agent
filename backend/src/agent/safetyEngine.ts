@@ -18,22 +18,29 @@ interface CaseForSafety {
   status: string;
   attemptCount?: number;
   type?: string;
+  customer?: {
+    emailOptOut?: boolean;
+    smsOptOut?: boolean;
+    whatsappOptOut?: boolean;
+  };
 }
 
 interface DecisionForSafety {
   chosen_action: string;
 }
 
+
 const CONTACT_ACTIONS = [
   'SEND_PAYMENT_LINK',
   'SEND_CARD_UPDATE_REMINDER',
   'SEND_REMINDER',
+  'SUGGEST_ALTERNATIVE_PAYMENT',
 ];
 
 const TERMINAL_STATUSES = ['RECOVERED', 'CLOSED_NO_RECOVERY', 'ESCALATED'];
 
 const MAX_CONTACT_ATTEMPTS: Record<string, number> = {
-  payment_failure: 2,
+  payment_failure: 3,
   subscription_failure: 3,
   checkout_abandonment: 2,
   invoice_overdue: 3,
@@ -67,7 +74,7 @@ export function checkSafetyRules(
 
   // 4. Attempt Limit Safety Check (Applies ONLY to customer-contact actions)
   if (CONTACT_ACTIONS.includes(aiDecision.chosen_action) && caseRecord.attemptCount !== undefined && caseRecord.type) {
-    const maxAllowed = MAX_CONTACT_ATTEMPTS[caseRecord.type] || 2;
+    const maxAllowed = MAX_CONTACT_ATTEMPTS[caseRecord.type] || 3;
     if (caseRecord.attemptCount >= maxAllowed) {
       return { approved: false, reason: `maximum attempt limit reached (${caseRecord.attemptCount}/${maxAllowed})` };
     }
@@ -78,6 +85,17 @@ export function checkSafetyRules(
     return { approved: false, reason: 'case already resolved' };
   }
 
+  // 6. Customer Opt-Out Safety Check
+  if (CONTACT_ACTIONS.includes(aiDecision.chosen_action) && caseRecord.customer) {
+    if (caseRecord.customer.emailOptOut || caseRecord.customer.smsOptOut || caseRecord.customer.whatsappOptOut) {
+      // Check if all channels opted out
+      if (caseRecord.customer.emailOptOut && caseRecord.customer.smsOptOut && caseRecord.customer.whatsappOptOut) {
+        return { approved: false, reason: 'customer has opted out of all communication channels' };
+      }
+    }
+  }
+
   // All checks passed
   return { approved: true, reason: 'all checks passed' };
 }
+

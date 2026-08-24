@@ -46,6 +46,12 @@ export async function observeCaseOutcome(caseId: string): Promise<ObservationRes
     };
   }
 
+  // Find the most recent message log for provider delivery feedback
+  const latestMessageLog = await prisma.messageLog.findFirst({
+    where: { caseId },
+    orderBy: { sentAt: 'desc' },
+  });
+
   // Find the most recent tool execution action
   const lastToolAction = caseRecord.actions.find((a) => a.actionType === 'TOOL_EXECUTED');
   let prevActionName: string | undefined;
@@ -62,6 +68,11 @@ export async function observeCaseOutcome(caseId: string): Promise<ObservationRes
       prevActionName = lastToolAction.actionType;
     }
   }
+
+  if (latestMessageLog && (latestMessageLog.deliveryStatus === 'FAILED' || latestMessageLog.deliveryStatus === 'BOUNCED')) {
+    lastToolFailed = true;
+  }
+
 
   let result: ObservationResult;
 

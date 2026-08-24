@@ -1,45 +1,61 @@
-/**
- * TOOL: sendReminder — 🟡 SIMULATED EXECUTION
- *
- * Does NOT call any real email/SMS/WhatsApp API.
- * Actually runs the function, writes a log row with the full message content
- * stored in the database — not a no-op. The message is "sent" only in
- * simulation; the content and intent are real and logged.
- */
-
 import { prisma } from '../../lib/prisma';
+import { ProviderFactory } from '../providers/providerFactory';
 
 interface ReminderResult {
   success: boolean;
   simulated: boolean;
   messageContent: string;
+  providerMessageId?: string;
+  channel: string;
 }
 
 export async function sendReminder(
   caseRecord: { id: string },
-  messageText: string
+  customer: { email: string; phone?: string | null },
+  messageText: string,
+  preferredChannel: 'EMAIL' | 'SMS' | 'WHATSAPP' = 'EMAIL'
 ): Promise<ReminderResult> {
-  // Log the simulated action to the database
+  const recipient = (preferredChannel === 'EMAIL' ? customer.email : customer.phone) || customer.email || '+15005550006';
+
+
+  const provider = ProviderFactory.getProvider(preferredChannel);
+
+  const dispatchResult = await provider.send({
+    caseId: caseRecord.id,
+    recipient: recipient!,
+    channel: preferredChannel,
+    subject: 'Friendly Payment Reminder',
+    bodyText: messageText,
+  });
+
+
+  // Log action row to AgentAction table
   await prisma.agentAction.create({
     data: {
       caseId: caseRecord.id,
-      actionType: 'SEND_REMINDER',
-      aiReasoning: 'Reminder sent (simulated delivery)',
-      status: 'SUCCESS',
+      actionType: 'TOOL_EXECUTED',
+      aiReasoning: `Reminder dispatched via ${dispatchResult.provider} (${preferredChannel})`,
+      status: dispatchResult.success ? 'SUCCESS' : 'FAILED',
       metadata: JSON.stringify({
-        simulated: true,
-        channel: 'email',
+        tool: 'SEND_REMINDER',
+        channel: preferredChannel,
+        provider: dispatchResult.provider,
+        providerMessageId: dispatchResult.providerMessageId,
+        isSimulated: dispatchResult.isSimulated,
         messageContent: messageText,
         sentAt: new Date().toISOString(),
       }),
     },
   });
 
-  console.log(`📧 [SIMULATED] Reminder logged for case ${caseRecord.id}`);
+  console.log(`📧 [${dispatchResult.provider}] Reminder sent via ${preferredChannel} for case ${caseRecord.id}`);
 
   return {
-    success: true,
-    simulated: true,
+    success: dispatchResult.success,
+    simulated: dispatchResult.isSimulated,
     messageContent: messageText,
+    providerMessageId: dispatchResult.providerMessageId,
+    channel: preferredChannel,
   };
 }
+

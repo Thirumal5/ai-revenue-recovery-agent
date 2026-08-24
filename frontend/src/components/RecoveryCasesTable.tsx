@@ -31,6 +31,7 @@ export interface RecoveryCase {
   razorpayPaymentLinkId?: string;
   actions?: AgentAction[];
   createdAt: string;
+  observationOutcome?: string;
 }
 
 interface RecoveryCasesTableProps {

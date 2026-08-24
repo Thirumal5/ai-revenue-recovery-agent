@@ -113,10 +113,11 @@ async function runPhase7TestSuite() {
       type: 'payment_failure',
       amount: 15000,
       status: 'OPEN',
-      attemptCount: 2,
+      attemptCount: 3,
       riskReason: 'High risk failure past attempt limits',
     },
   });
+  process.env.COOLDOWN_MS = '0';
   const res5 = await processCase(case5.id);
   assert(res5.success === true, 'Test 5: Escalation process complete');
   const updatedCase5 = await prisma.recoveryCase.findUnique({ where: { id: case5.id } });
@@ -134,6 +135,7 @@ async function runPhase7TestSuite() {
       riskReason: 'Old checkout abandonment',
     },
   });
+  process.env.COOLDOWN_MS = '0';
   const res6 = await processCase(case6.id);
   assert(res6.success === true, 'Test 6: Close no action complete');
   const updatedCase6 = await prisma.recoveryCase.findUnique({ where: { id: case6.id } });
@@ -196,6 +198,7 @@ async function runPhase7TestSuite() {
       riskReason: 'Subscription payment failed',
     },
   });
+  process.env.COOLDOWN_MS = '0';
   const res11 = await processCase(case11.id);
   assert(res11.success === true, 'Test 11: Execution succeeded');
   const updatedCase11 = await prisma.recoveryCase.findUnique({ where: { id: case11.id } });

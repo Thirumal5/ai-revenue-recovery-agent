@@ -11,6 +11,7 @@
 import { sendPaymentLink } from './tools/sendPaymentLink';
 import { sendCardUpdateReminder } from './tools/sendCardUpdateReminder';
 import { sendReminder } from './tools/sendReminder';
+import { suggestAlternativePayment } from './tools/suggestAlternativePayment';
 import { escalateToHuman } from './tools/escalateToHuman';
 import { closeCaseNoAction } from './tools/closeCaseNoAction';
 
@@ -34,6 +35,7 @@ export interface CasePayload {
 export interface CustomerPayload {
   name: string;
   email: string;
+  phone?: string | null;
 }
 
 export interface AIDecisionPayload {
@@ -65,7 +67,7 @@ export async function executeTool(
 
     case 'SEND_CARD_UPDATE_REMINDER': {
       const msg = aiDecision.customer_message || 'Please update your card details to continue your subscription.';
-      const res = await sendCardUpdateReminder({ id: caseRecord.id }, msg);
+      const res = await sendCardUpdateReminder({ id: caseRecord.id }, customer, msg, 'EMAIL');
       return {
         success: res.success,
         tool: 'SEND_CARD_UPDATE_REMINDER',
@@ -75,13 +77,26 @@ export async function executeTool(
 
     case 'SEND_REMINDER': {
       const msg = aiDecision.customer_message || 'This is a friendly reminder regarding your pending payment.';
-      const res = await sendReminder({ id: caseRecord.id }, msg);
+      const res = await sendReminder({ id: caseRecord.id }, customer, msg, 'EMAIL');
       return {
         success: res.success,
         tool: 'SEND_REMINDER',
         message: res.messageContent,
       };
     }
+
+    case 'SUGGEST_ALTERNATIVE_PAYMENT': {
+      const msg =
+        aiDecision.customer_message ||
+        'Your payment could not be completed with the current payment method. Please try another available payment method.';
+      const res = await suggestAlternativePayment({ id: caseRecord.id }, customer, msg, 'EMAIL');
+      return {
+        success: res.success,
+        tool: 'SUGGEST_ALTERNATIVE_PAYMENT',
+        message: res.messageContent,
+      };
+    }
+
 
     case 'ESCALATE_TO_HUMAN': {
       const reason = aiDecision.reasoning || 'Escalated to human operator by recovery policy';

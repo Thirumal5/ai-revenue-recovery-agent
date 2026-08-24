@@ -4,13 +4,23 @@ An event-driven platform designed for the Razorpay Buildathon to automatically r
 
 ---
 
-## 🚀 Progress Summary (Phases 1 – 6 Complete)
+## 🚀 Progress Summary (Phases 1 – 11 Complete)
 
-RecoverXAI is an end-to-end, production-ready AI Revenue Recovery Agent featuring an event processor, deterministic safety boundaries, LLM reasoning engine (Groq), real Razorpay test-mode tool execution, background autonomous scheduler, real-time analytics dashboard, and a 100% verified test suite.
+RecoverXAI is an end-to-end, production-ready AI Revenue Recovery Agent featuring an event processor, deterministic safety boundaries, LLM reasoning engine (Groq GPT-OSS-120B), real Razorpay test-mode tool execution & HMAC-SHA256 verified payment reconciliation, provider-based communication architecture (Email, SMS, WhatsApp), background autonomous scheduler, real-time analytics dashboard, and a 100% verified test suite across 95+ test assertions.
 
 ---
 
 ### Phase & Feature Breakdown
+
+#### 🟢 Phase 11: Provider-Based Communication Architecture & Razorpay Webhook Reconciliation
+- **Provider Architecture (`src/agent/providers/`)**: Decoupled messaging engine defining `ICommunicationProvider` and supported by `ProviderFactory` supporting `SIMULATED` and `REAL` (`SendGrid` and `Twilio`) modes based on `COMMUNICATION_MODE`.
+- **Multi-Channel Dispatch**: Support for `EMAIL`, `SMS`, and `WHATSAPP` channels with database delivery logging in `MessageLog`.
+- **Razorpay Webhook Verification (`POST /webhooks/razorpay`)**: Ingests `payment.captured`, `payment_link.paid`, and `order.paid` events. Strict fail-closed HMAC-SHA256 signature verification (HTTP 503 if secret missing, HTTP 401 if signature invalid).
+- **Idempotency & Trustworthy Recovery**: Webhook events are checked for duplicate event IDs. Matching recovery cases are updated to `status = RECOVERED`, setting `observationOutcome = RECOVERED` and stopping further recovery attempts.
+- **Opt-Out Safety Protections**: `SafetyEngine` enforces `emailOptOut`, `smsOptOut`, and `whatsappOptOut` preference checks prior to dispatch.
+- **Enhanced Agent Drawer UI**: Visualizes communication mode (`REAL` vs `SIMULATED`), provider type, channel, delivery status, and provider message SID alongside verified Razorpay webhook trace.
+- **Comprehensive Test Suite (`src/agent/testPhase11.ts`)**: 100% passing automated test suite verifying provider abstraction, multi-channel dispatch, safety opt-outs, webhook signature verification, idempotency, and recovery reconciliation.
+
 
 #### 🟢 Phase 1: Project Setup & Architecture
 - **Frontend**: Vite + React + TypeScript + TailwindCSS fintech dashboard.

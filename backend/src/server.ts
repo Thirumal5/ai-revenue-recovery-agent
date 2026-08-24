@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import crypto from 'crypto';
 import { prisma } from './lib/prisma';
 import { processCase } from './agent/orchestrator';
 import { startScheduler } from './agent/scheduler';
@@ -11,7 +12,14 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 
 app.use(cors());
-app.use(express.json());
+app.use(
+  express.json({
+    verify: (req: any, res, buf) => {
+      req.rawBody = buf.toString();
+    },
+  })
+);
+
 
 // --- Utility: Map raw Razorpay event types to clean case categories ---
 function mapEventTypeToCategory(eventType: string): string {
@@ -224,15 +232,186 @@ app.get('/api/settings/config', (req, res) => {
   });
 });
 
-// Phase 4: Event Processor Webhook Endpoint
+// Phase 11 Part A: Real Razorpay Webhook Ingestion with Signature Verification
+app.post('/webhooks/razorpay', async (req: any, res) => {
+  const secret = process.env.RAZORPAY_WEBHOOK_SECRET;
+
+  // FAIL CLOSED RULE: Missing webhook secret yields 503 Service Unavailable
+  if (!secret) {
+    console.error('❌ [RAZORPAY WEBHOOK] RAZORPAY_WEBHOOK_SECRET not configured in environment. Failing closed.');
+    res.status(503).json({ error: 'Webhook secret not configured in environment' });
+    return;
+  }
+
+  // Signature verification using HMAC SHA256
+  const signature = req.headers['x-razorpay-signature'] as string;
+  if (!signature) {
+    console.error('❌ [RAZORPAY WEBHOOK] Missing x-razorpay-signature header');
+    res.status(401).json({ error: 'Missing x-razorpay-signature header' });
+    return;
+  }
+
+  const rawBody = req.rawBody || JSON.stringify(req.body);
+  const expectedSignature = crypto.createHmac('sha256', secret).update(rawBody).digest('hex');
+
+  if (signature !== expectedSignature) {
+    console.error('❌ [RAZORPAY WEBHOOK] Invalid Razorpay webhook signature');
+    res.status(401).json({ error: 'Invalid Razorpay webhook signature' });
+    return;
+  }
+
+  const event = req.body;
+  const eventId = (req.headers['x-razorpay-event-id'] as string) || event.event_id || event.id;
+
+  console.log(`\n==================================================`);
+  console.log(`💳 VERIFIED RAZORPAY WEBHOOK RECEIVED: ${event.type}`);
+  console.log(`   Event ID: ${eventId || 'N/A'}`);
+  console.log(`==================================================\n`);
+
+  // Idempotency Check: prevent duplicate event processing
+  if (eventId) {
+    const existingAction = await prisma.agentAction.findFirst({
+      where: {
+        metadata: {
+          contains: eventId,
+        },
+      },
+    });
+    if (existingAction) {
+      console.log(`⚠️ Duplicate Razorpay webhook event ${eventId} ignored.`);
+      res.json({ status: 'ignored', reason: 'duplicate_event', eventId });
+      return;
+    }
+  }
+
+  // Official Razorpay Event Types: payment.captured, payment_link.paid, order.paid
+  const successEvents = ['payment.captured', 'payment_link.paid', 'order.paid'];
+
+  if (successEvents.includes(event.type)) {
+    const paymentEntity = event.payload?.payment?.entity;
+    const paymentLinkEntity = event.payload?.payment_link?.entity;
+    const orderEntity = event.payload?.order?.entity;
+
+    const plinkId = paymentLinkEntity?.id || paymentEntity?.payment_link_id;
+    const orderId = orderEntity?.id || paymentEntity?.order_id;
+    const caseIdInNotes = paymentEntity?.notes?.caseId || paymentLinkEntity?.notes?.caseId;
+    const email = paymentEntity?.email || paymentLinkEntity?.customer?.email;
+
+    let targetCase = null;
+
+    if (caseIdInNotes) {
+      targetCase = await prisma.recoveryCase.findUnique({ where: { id: caseIdInNotes } });
+    }
+    if (!targetCase && plinkId) {
+      targetCase = await prisma.recoveryCase.findFirst({
+        where: { razorpayPaymentLinkId: plinkId, status: 'OPEN' },
+      });
+    }
+    if (!targetCase && email) {
+      targetCase = await prisma.recoveryCase.findFirst({
+        where: { customer: { email }, status: 'OPEN' },
+        orderBy: { createdAt: 'desc' },
+      });
+    }
+
+    if (targetCase) {
+      if (targetCase.status === 'RECOVERED') {
+        console.log(`ℹ️ Case ${targetCase.id} is already RECOVERED. Ignoring duplicate event.`);
+        res.json({ status: 'already_recovered', caseId: targetCase.id });
+        return;
+      }
+
+      await prisma.recoveryCase.update({
+        where: { id: targetCase.id },
+        data: {
+          status: 'RECOVERED',
+          observationOutcome: 'RECOVERED',
+          lockedForProcessing: false,
+        },
+      });
+
+      const amountPaid = (paymentEntity?.amount || paymentLinkEntity?.amount || orderEntity?.amount_paid || 0) / 100;
+
+      await prisma.agentAction.create({
+        data: {
+          caseId: targetCase.id,
+          actionType: 'OBSERVATION',
+          aiReasoning: `Verified Razorpay payment success event (${event.type}) received. Revenue recovered!`,
+          status: 'SUCCESS',
+          metadata: JSON.stringify({
+            eventId,
+            event: event.type,
+            paymentId: paymentEntity?.id,
+            paymentLinkId: plinkId,
+            orderId,
+            amount: amountPaid,
+            verified: true,
+          }),
+        },
+      });
+
+      console.log(`🎉 Case ${targetCase.id} successfully updated to RECOVERED via verified Razorpay webhook!`);
+      res.json({ status: 'RECOVERED', caseId: targetCase.id, amount: amountPaid });
+      return;
+    }
+  }
+
+  res.json({ status: 'received', event: event.type });
+});
+
+// Phase 4 & Phase 11: Event Processor Webhook Endpoint
 app.post('/webhooks/simulator', async (req, res) => {
   const event = req.body;
-  const paymentEntity = event.payload?.payment?.entity;
+  const paymentEntity = event.payload?.payment?.entity || event.payload?.payment_link?.entity;
   
   console.log('\n================================');
-  console.log('🚨 SIMULATOR EVENT RECEIVED 🚨');
+  console.log('🚨 EVENT RECEIVED AT WEBHOOK 🚨');
   console.log(`Event Type: ${event.type}`);
   
+  // Payment Recovery Match: Payment captured or Payment Link Paid
+  if (event.type === 'payment.captured' || event.type === 'payment_link.paid') {
+    const plinkId = paymentEntity?.id || event.payload?.payment_link?.entity?.id;
+    const email = paymentEntity?.email;
+
+    let targetCase = null;
+    if (plinkId) {
+      targetCase = await prisma.recoveryCase.findFirst({
+        where: { razorpayPaymentLinkId: plinkId, status: 'OPEN' },
+      });
+    }
+    if (!targetCase && email) {
+      targetCase = await prisma.recoveryCase.findFirst({
+        where: { customer: { email }, status: 'OPEN' },
+        orderBy: { createdAt: 'desc' },
+      });
+    }
+
+    if (targetCase) {
+      await prisma.recoveryCase.update({
+        where: { id: targetCase.id },
+        data: { status: 'RECOVERED', observationOutcome: 'RECOVERED' },
+      });
+
+      await prisma.agentAction.create({
+        data: {
+          caseId: targetCase.id,
+          actionType: 'OBSERVATION',
+          aiReasoning: `Payment captured via Razorpay webhook event (${event.type}). Revenue recovered!`,
+          status: 'SUCCESS',
+          metadata: JSON.stringify({
+            event: event.type,
+            paymentId: paymentEntity?.id,
+            amount: (paymentEntity?.amount || 0) / 100,
+          }),
+        },
+      });
+
+      console.log(`🎉 Case ${targetCase.id} updated to RECOVERED via Razorpay payment event!`);
+      res.json({ status: 'RECOVERED', caseId: targetCase.id });
+      return;
+    }
+  }
+
   if (!paymentEntity?.email) {
     res.status(400).json({ error: "Missing email" });
     return;
@@ -249,6 +428,7 @@ app.post('/webhooks/simulator', async (req, res) => {
         data: {
           email: paymentEntity.email,
           name: paymentEntity.email.split('@')[0], 
+          phone: paymentEntity.contact || null,
         }
       });
       console.log(`👤 Created new Customer: ${customer.email}`);
@@ -287,6 +467,88 @@ app.post('/webhooks/simulator', async (req, res) => {
     res.status(500).json({ error: "Database operation failed" });
   }
 });
+
+// Phase 11: SendGrid Webhook Endpoint (Status Callbacks)
+app.post('/webhooks/providers/sendgrid', async (req, res) => {
+  const events = Array.isArray(req.body) ? req.body : [req.body];
+  for (const evt of events) {
+    const msgId = evt.sg_message_id || evt.message_id;
+    if (msgId) {
+      const statusMap: Record<string, string> = {
+        delivered: 'DELIVERED',
+        bounce: 'BOUNCED',
+        dropped: 'FAILED',
+        deferred: 'QUEUED',
+      };
+      const deliveryStatus = statusMap[evt.event] || evt.event?.toUpperCase() || 'SENT';
+      await prisma.messageLog.updateMany({
+        where: { providerMessageId: msgId },
+        data: { deliveryStatus, errorDetails: evt.reason || null },
+      });
+    }
+  }
+  res.json({ status: 'ok' });
+});
+
+// Phase 11: Twilio Webhook Endpoint (SMS / WhatsApp Status Callbacks)
+app.post('/webhooks/providers/twilio', async (req, res) => {
+  const { MessageSid, MessageStatus, ErrorCode, ErrorMessage } = req.body;
+  if (MessageSid) {
+    const deliveryStatus = MessageStatus ? MessageStatus.toUpperCase() : 'SENT';
+    await prisma.messageLog.updateMany({
+      where: { providerMessageId: MessageSid },
+      data: {
+        deliveryStatus,
+        errorDetails: ErrorCode ? `${ErrorCode}: ${ErrorMessage}` : null,
+      },
+    });
+  }
+  res.json({ status: 'ok' });
+});
+
+// Phase 11: Customer Inbound Opt-Out Webhook
+app.post('/webhooks/providers/inbound-optout', async (req, res) => {
+  const { recipient, channel, keyword } = req.body;
+  if (!recipient) {
+    res.status(400).json({ error: 'Missing recipient' });
+    return;
+  }
+
+  const optKeywords = ['STOP', 'UNSUBSCRIBE', 'OPT-OUT', 'OPTOUT'];
+  const isOptOut = !keyword || optKeywords.includes(keyword.toUpperCase());
+
+  if (isOptOut) {
+    const customer = await prisma.customer.findFirst({
+      where: {
+        OR: [{ email: recipient }, { phone: recipient }],
+      },
+    });
+
+    if (customer) {
+      const updateData: Record<string, boolean> = {};
+      if (channel === 'SMS') updateData.smsOptOut = true;
+      if (channel === 'WHATSAPP') updateData.whatsappOptOut = true;
+      if (channel === 'EMAIL') updateData.emailOptOut = true;
+      if (!channel) {
+        updateData.smsOptOut = true;
+        updateData.whatsappOptOut = true;
+        updateData.emailOptOut = true;
+      }
+
+      await prisma.customer.update({
+        where: { id: customer.id },
+        data: updateData,
+      });
+
+      console.log(`🚫 Customer ${customer.email} opted out of ${channel || 'ALL'} communications`);
+      res.json({ status: 'opted_out', customerId: customer.id });
+      return;
+    }
+  }
+
+  res.json({ status: 'ignored' });
+});
+
 
 // Phase 5: AI Agent Process Endpoint (Manual Trigger preserved for testing)
 app.post('/api/cases/:id/process', async (req, res) => {

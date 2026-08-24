@@ -7,11 +7,15 @@ generator client {
 }
 
 model Customer {
-  id        String         @id @default(uuid())
-  email     String         @unique
-  name      String
-  cases     RecoveryCase[]
-  createdAt DateTime       @default(now())
+  id            String         @id @default(uuid())
+  email         String         @unique
+  name          String
+  phone         String?
+  emailOptOut   Boolean        @default(false)
+  smsOptOut     Boolean        @default(false)
+  whatsappOptOut Boolean       @default(false)
+  cases         RecoveryCase[]
+  createdAt     DateTime       @default(now())
 }
 
 model RecoveryCase {
@@ -30,6 +34,7 @@ model RecoveryCase {
   lockedForProcessing   Boolean       @default(false)
   razorpayPaymentLinkId String?       // Stores real Razorpay link ID when created
   actions               AgentAction[]
+  messages              MessageLog[]
   createdAt             DateTime      @default(now())
   updatedAt             DateTime      @updatedAt
 }
@@ -44,3 +49,20 @@ model AgentAction {
   metadata       String?      // JSON string for tool/observation-specific result data
   timestamp      DateTime     @default(now())
 }
+
+model MessageLog {
+  id                String       @id @default(uuid())
+  caseId            String
+  case              RecoveryCase @relation(fields: [caseId], references: [id])
+  channel           String       // "EMAIL", "SMS", "WHATSAPP"
+  provider          String       // "SENDGRID", "TWILIO_SMS", "TWILIO_WHATSAPP", "SIMULATED"
+  providerMessageId String?      // Message SID or SendGrid ID
+  recipient         String       // Email address or Phone number
+  subject           String?
+  bodyText          String
+  deliveryStatus    String       @default("QUEUED") // "QUEUED", "SENT", "DELIVERED", "FAILED", "BOUNCED"
+  errorDetails      String?
+  sentAt            DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+}
+

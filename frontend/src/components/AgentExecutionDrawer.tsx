@@ -220,7 +220,7 @@ export const AgentExecutionDrawer: React.FC<AgentExecutionDrawerProps> = ({ reco
             </div>
           </div>
 
-          {/* STEP 6: RAZORPAY TOOL EXECUTION */}
+          {/* STEP 6: CONTROLLED TOOL & COMMUNICATION DISPATCH */}
           <div className="flex gap-4">
             <div className="flex flex-col items-center">
               <div className="w-8 h-8 rounded-full bg-purple-50 text-purple-600 flex items-center justify-center font-bold text-sm shadow-2xs">
@@ -233,13 +233,45 @@ export const AgentExecutionDrawer: React.FC<AgentExecutionDrawerProps> = ({ reco
                 <span className="font-mono text-[11px] font-bold text-slate-400 uppercase">STEP 6</span>
                 <span className="text-[10px] text-slate-400 font-mono">13:54:10</span>
               </div>
-              <div className="font-extrabold text-slate-950 uppercase tracking-tight text-xs mt-0.5">RAZORPAY TOOL EXECUTION</div>
-              <div className="mt-2 flex items-center justify-between">
-                <span className="text-slate-600">Tool: <strong className="font-mono text-slate-900">{toolData.action || toolData.result?.tool || 'SEND_PAYMENT_LINK'}</strong></span>
-                <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded">
-                  {toolAction?.status === 'SUCCESS' ? 'EXECUTED' : 'FAILED'}
-                </span>
+              <div className="font-extrabold text-slate-950 uppercase tracking-tight text-xs mt-0.5">
+                TOOL & PROVIDER DISPATCH
               </div>
+              <div className="mt-2 space-y-2 bg-slate-50/70 p-3 rounded-xl border border-slate-100">
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-600">Tool: <strong className="font-mono text-slate-900">{toolData.tool || toolData.action || toolData.result?.tool || 'SEND_PAYMENT_LINK'}</strong></span>
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${toolAction?.status === 'SUCCESS' ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}`}>
+                    {toolAction?.status === 'SUCCESS' ? 'EXECUTED' : 'FAILED'}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-200/60 text-[11px]">
+                  <div>
+                    <span className="text-slate-500">Mode:</span>{' '}
+                    <span className={`font-mono font-bold px-1.5 py-0.5 rounded text-[10px] ${toolData.isSimulated !== false ? 'bg-amber-100 text-amber-900' : 'bg-emerald-100 text-emerald-900'}`}>
+                      {toolData.isSimulated !== false ? 'SIMULATED' : 'REAL'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500">Provider:</span>{' '}
+                    <span className="font-mono font-semibold text-slate-900">{toolData.provider || 'SimulatedProvider'}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500">Channel:</span>{' '}
+                    <span className="font-mono font-semibold text-slate-900">{toolData.channel || 'EMAIL'}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500">Delivery:</span>{' '}
+                    <span className="font-mono font-semibold text-slate-900">{toolData.deliveryStatus || 'DELIVERED'}</span>
+                  </div>
+                </div>
+
+                {toolData.providerMessageId && (
+                  <div className="text-[10px] font-mono text-slate-500 pt-1">
+                    Msg SID: <span className="text-slate-800 font-semibold">{toolData.providerMessageId}</span>
+                  </div>
+                )}
+              </div>
+
               {paymentLinkUrl && (
                 <div className="mt-3">
                   <a
@@ -254,6 +286,7 @@ export const AgentExecutionDrawer: React.FC<AgentExecutionDrawerProps> = ({ reco
               )}
             </div>
           </div>
+
 
           {/* STEP 7: AUTONOMOUS OBSERVATION */}
           <div className="flex gap-4">
