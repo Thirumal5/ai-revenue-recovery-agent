@@ -91,7 +91,7 @@ function getFallbackDecision(context: CaseContext, reasoning: string): AIDecisio
 export async function decideRecoveryAction(context: CaseContext): Promise<AIDecision> {
   const apiKey = process.env.GROQ_API_KEY;
   const primaryModel = process.env.GROQ_MODEL || 'openai/gpt-oss-120b';
-  const candidateModels = Array.from(new Set([primaryModel, 'openai/gpt-oss-20b', 'groq/compound-mini']));
+  const candidateModels = Array.from(new Set([primaryModel, 'openai/gpt-oss-120b', 'groq/compound-mini', 'groq/compound']));
 
   if (!apiKey) {
     console.error('❌ GROQ_API_KEY is not set in .env');
@@ -137,10 +137,10 @@ export async function decideRecoveryAction(context: CaseContext): Promise<AIDeci
       }
 
       if (!response || !response.ok) {
-        const errorText = response ? await response.text() : 'No response';
-        console.error(`❌ Groq API error (${response?.status}) on model ${modelName}:`, errorText);
+        console.warn(`⚠️ Groq API model ${modelName} unavailable (${response?.status || 'network error'}). Trying fallback model...`);
         continue;
       }
+
 
       const data = await response.json();
       const content = data.choices?.[0]?.message?.content;

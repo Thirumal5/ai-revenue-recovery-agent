@@ -41,10 +41,14 @@ async function runTestSuite() {
   console.log('🧪 RUNNING PHASE 6 AUTONOMOUS AGENT TEST SUITE');
   console.log('==================================================\n');
 
-  // Clean up previous test cases in DB before test run
+  // Clean up previous test cases in DB before test run sequentially
   await prisma.agentAction.deleteMany({});
+  await new Promise((r) => setTimeout(r, 100));
   await prisma.messageLog.deleteMany({});
+  await new Promise((r) => setTimeout(r, 100));
   await prisma.recoveryCase.deleteMany({});
+  await new Promise((r) => setTimeout(r, 100));
+
 
   // Create a clean test customer
   const testCustomer = await prisma.customer.upsert({

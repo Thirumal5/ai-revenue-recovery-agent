@@ -47,19 +47,20 @@ export async function runSchedulerTick(): Promise<void> {
       
       for (const caseRecord of eligibleCases) {
         console.log(`⚡ Auto-processing case: ${caseRecord.id}`);
-        // Asynchronously process each case; isolate errors so one case failure doesn't halt the scheduler
-        processCase(caseRecord.id)
-          .then((res) => {
-            if (res.success) {
-              console.log(`✅ Scheduler processing completed: ${caseRecord.id}`);
-            } else {
-              console.log(`❌ Scheduler processing skipped/failed: ${caseRecord.id} (${res.error || 'blocked'})`);
-            }
-          })
-          .catch((err: any) => {
-            console.error(`❌ Scheduler processing failed: ${caseRecord.id}`, err?.message || err);
-          });
+        try {
+          const res = await processCase(caseRecord.id);
+          if (res.success) {
+            console.log(`✅ Scheduler processing completed: ${caseRecord.id}`);
+          } else {
+            console.log(`❌ Scheduler processing skipped/failed: ${caseRecord.id} (${res.error || 'blocked'})`);
+          }
+        } catch (err: any) {
+          console.error(`❌ Scheduler processing failed: ${caseRecord.id}`, err?.message || err);
+        }
+        // Small 500ms delay between cases to prevent Groq LLM API rate limits
+        await new Promise((r) => setTimeout(r, 500));
       }
+
     }
   } catch (error: any) {
     console.error('❌ Scheduler scan error:', error?.message || error);

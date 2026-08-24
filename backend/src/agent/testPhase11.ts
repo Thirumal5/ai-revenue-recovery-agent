@@ -28,10 +28,10 @@ async function runPhase11Tests() {
 
   function assert(condition: boolean, testName: string, detail?: string) {
     if (condition) {
-      console.log(`✅ PASS: ${testName}`);
+      console.log(`PASS: ${testName}`);
       passed++;
     } else {
-      console.error(`❌ FAIL: ${testName} ${detail ? `(${detail})` : ''}`);
+      console.error(`FAIL: ${testName} ${detail ? `(${detail})` : ''}`);
       failed++;
     }
   }
