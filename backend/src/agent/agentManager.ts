@@ -10,7 +10,7 @@
  * 5. Case state remains source of truth (Promise-to-Pay / waiting safely releases worker).
  */
 
-import { prisma } from '../lib/prisma';
+import { prisma, withDbRetry } from '../lib/prisma';
 import { processCase } from './orchestrator';
 
 export interface WorkerState {
@@ -135,7 +135,7 @@ class AgentManager {
     }
 
     // ATOMIC CLAIM: Update DB first
-    const claimResult = await prisma.recoveryCase.updateMany({
+    const claimResult = await withDbRetry(() => prisma.recoveryCase.updateMany({
       where: {
         id: caseId,
         status: 'OPEN',
@@ -147,7 +147,7 @@ class AgentManager {
         claimedAt: new Date(),
         lockedForProcessing: false,
       },
-    });
+    }));
 
     if (claimResult.count === 0) {
       // Another worker claimed it concurrently

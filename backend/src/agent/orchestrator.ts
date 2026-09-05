@@ -11,7 +11,7 @@
  * Uses try/finally to guarantee the lock is always released.
  */
 
-import { prisma } from '../lib/prisma';
+import { prisma, withDbRetry } from '../lib/prisma';
 import { classifyFailureReason } from './classifier';
 import { getAllowedActions } from './allowedActions';
 import { decideRecoveryAction, CaseContext } from './groqDecisionService';
@@ -78,7 +78,7 @@ export async function processCase(caseId: string, agentId: string = 'Agent-01'):
   }
 
   // Atomic Lock Acquisition (Prevents concurrent processing by multiple workers)
-  const lockResult = await prisma.recoveryCase.updateMany({
+  const lockResult = await withDbRetry(() => prisma.recoveryCase.updateMany({
     where: {
       id: caseId,
       lockedForProcessing: false,
@@ -87,7 +87,7 @@ export async function processCase(caseId: string, agentId: string = 'Agent-01'):
     data: {
       lockedForProcessing: true,
     },
-  });
+  }));
 
   if (lockResult.count === 0) {
     const currentCase = await prisma.recoveryCase.findUnique({ where: { id: caseId } });
