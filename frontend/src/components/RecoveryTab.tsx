@@ -249,7 +249,7 @@ export const RecoveryTab: React.FC<RecoveryTabProps> = ({
             <div className="bg-[#0c0d18] border border-[#1a1c30] p-8 rounded-2xl text-center space-y-3">
               <div className="w-10 h-10 border-2 border-[#7c3aed] border-t-transparent rounded-full animate-spin mx-auto" />
               <h3 className="text-sm font-mono font-bold text-white uppercase">Dispatching Batch across Worker Pool...</h3>
-              <p className="text-xs text-slate-400 font-mono">Executing Groq AI decisions and safety rules for {batchCount} cases.</p>
+              <p className="text-xs text-slate-400 font-mono">Executing RecoverX AI Agent decisions and safety rules for {batchCount} cases.</p>
             </div>
           )}
 

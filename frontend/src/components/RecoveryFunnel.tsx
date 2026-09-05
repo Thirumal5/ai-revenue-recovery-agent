@@ -34,7 +34,7 @@ export const RecoveryFunnel: React.FC<RecoveryFunnelProps> = ({ cases }) => {
   const stages = [
     { num: '01', title: 'Risk Event', desc: 'Events detected', count: totalEvents, icon: '⚡', color: 'bg-indigo-500 text-white' },
     { num: '02', title: 'Classification', desc: 'Classified', count: classifiedCount, icon: '📋', color: 'bg-amber-500 text-white' },
-    { num: '03', title: 'Groq Decision', desc: 'Decisions made', count: decisionCount, icon: '🧠', color: 'bg-purple-500 text-white' },
+    { num: '03', title: 'AI Decision', desc: 'Decisions made', count: decisionCount, icon: '🧠', color: 'bg-purple-500 text-white' },
     { num: '04', title: 'Safety Check', desc: 'Approved', count: safetyPassedCount, icon: '🛡️', color: 'bg-blue-500 text-white' },
     { num: '05', title: 'Tool Execution', desc: 'Executed', count: toolExecutedCount, icon: '🚀', color: 'bg-pink-500 text-white' },
     { num: '06', title: 'Recovery', desc: 'Recovered', count: recoveredCount, icon: '🟢', color: 'bg-emerald-500 text-white' },

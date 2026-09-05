@@ -161,10 +161,10 @@ export const MultiAgentDashboard: React.FC<MultiAgentDashboardProps> = ({ apiBas
 
           <ArrowDown className="w-4 h-4 text-zinc-600 animate-bounce" />
 
-          {/* Node 3: Groq AI Decision */}
+          {/* Node 3: RecoverX AI Decision */}
           <div className="bg-[#12121a] border border-purple-500/40 text-purple-300 font-black text-xs px-6 py-2.5 rounded-xl shadow-lg flex items-center gap-2">
             <Cpu className="w-4 h-4 text-purple-400" />
-            <span>GROQ AI DECISION AGENT</span>
+            <span>RECOVERX AI DECISION AGENT</span>
           </div>
 
           <ArrowDown className="w-4 h-4 text-zinc-600 animate-bounce" />

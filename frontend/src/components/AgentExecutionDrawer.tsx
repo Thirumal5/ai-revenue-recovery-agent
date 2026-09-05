@@ -31,7 +31,7 @@ export const AgentExecutionDrawer: React.FC<AgentExecutionDrawerProps> = ({
 
   const rationaleText = aiDecisionAction?.aiReasoning
     ? aiDecisionAction.aiReasoning
-    : `Groq AI decision engine evaluated failure scenario "${caseRecord.riskReason}" for ₹${caseRecord.amount}. Policy boundary recommends automated retry and payment link dispatch.`;
+    : `RecoverX AI Agent evaluated failure scenario "${caseRecord.riskReason}" for ₹${caseRecord.amount}. Policy boundary recommends automated retry and payment link dispatch.`;
 
   // Sort case actions chronologically for timeline
   const actionsList = [...(caseRecord.actions || [])].sort(

@@ -71,7 +71,7 @@ export const Settings: React.FC<SettingsProps> = () => {
                 <Cpu className="w-4 h-4" />
               </div>
               <div>
-                <span className="font-bold text-white block">Groq AI Engine</span>
+                <span className="font-bold text-white block">RecoverX AI Engine</span>
                 <span className="text-[10px] text-slate-500 font-mono">Llama-3.3 70B Decision Policy</span>
               </div>
             </div>

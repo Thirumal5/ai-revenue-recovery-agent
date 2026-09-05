@@ -330,7 +330,7 @@ export const RecoveryPlayground: React.FC<RecoveryPlaygroundProps> = ({
     {
       num: 4,
       title: 'AI DECISION',
-      desc: `Groq action: ${aiDecisionName || 'Evaluating...'}`,
+      desc: `RecoverX action: ${aiDecisionName || 'Evaluating...'}`,
       done: !!aiDecisionName,
     },
     {
@@ -638,7 +638,7 @@ export const RecoveryPlayground: React.FC<RecoveryPlaygroundProps> = ({
           <div className="mt-4 bg-white/5 border border-white/10 rounded-xl p-3 text-[10px] text-zinc-400 font-medium flex items-start gap-2">
             <Info className="w-3.5 h-3.5 text-indigo-400 shrink-0 mt-0.5" />
             <p>
-              Clicking trigger simulates a real webhook from your billing provider. The backend agent will instantly wake up, ingest the event, run safety checks, and decide on a recovery action via Groq AI.
+              Clicking trigger simulates a real webhook from your billing provider. The backend agent will instantly wake up, ingest the event, run safety checks, and decide on a recovery action via RecoverX AI Agent.
             </p>
           </div>
         </div>

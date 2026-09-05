@@ -772,11 +772,11 @@ app.get('/api/settings/config', (req, res) => {
       processing: 'Background / Autonomous',
     },
     aiConfig: {
-      provider: 'Groq',
-      model: 'llama-3.3-70b-versatile',
+      provider: 'RecoverX AI Agent',
+      model: 'recoverx-autonomous-v1',
       decisionMode: 'Structured JSON',
       role: 'Recovery Decision Engine',
-      description: 'Groq evaluates allowed recovery actions and selects the most appropriate strategy. Deterministic safety rules validate decisions before tool execution.',
+      description: 'RecoverX AI Agent evaluates allowed recovery actions and selects the most appropriate strategy. Deterministic safety rules validate decisions before tool execution.',
     },
     paymentIntegration: {
       provider: 'Razorpay',

@@ -38,7 +38,7 @@ export const AIOperationsTab: React.FC<AIOperationsTabProps> = ({ apiBase, cases
           setWorkers([
             { id: 'Worker-01', role: 'Detection & Event Ingestion', status: 'RUNNING', currentCaseId: cases[0]?.id || 'pay_01', jobsCompleted: 42, latencyMs: 180 },
             { id: 'Worker-02', role: 'Failure Risk Classifier', status: 'IDLE', currentCaseId: null, jobsCompleted: 37, latencyMs: 210 },
-            { id: 'Worker-03', role: 'Groq AI Decision Engine', status: 'RUNNING', currentCaseId: cases[1]?.id || 'pay_02', jobsCompleted: 51, latencyMs: 320 },
+            { id: 'Worker-03', role: 'RecoverX AI Decision Engine', status: 'RUNNING', currentCaseId: cases[1]?.id || 'pay_02', jobsCompleted: 51, latencyMs: 320 },
             { id: 'Worker-04', role: 'Safety Boundary & Tool Executor', status: 'IDLE', currentCaseId: null, jobsCompleted: 29, latencyMs: 195 },
             { id: 'Worker-05', role: 'Razorpay Auto-Reconciliation', status: 'COMPLETED', currentCaseId: null, jobsCompleted: 64, latencyMs: 140 },
           ]);
@@ -48,7 +48,7 @@ export const AIOperationsTab: React.FC<AIOperationsTabProps> = ({ apiBase, cases
       setWorkers([
         { id: 'Worker-01', role: 'Detection & Event Ingestion', status: 'RUNNING', currentCaseId: cases[0]?.id || 'pay_01', jobsCompleted: 42, latencyMs: 180 },
         { id: 'Worker-02', role: 'Failure Risk Classifier', status: 'IDLE', currentCaseId: null, jobsCompleted: 37, latencyMs: 210 },
-        { id: 'Worker-03', role: 'Groq AI Decision Engine', status: 'RUNNING', currentCaseId: cases[1]?.id || 'pay_02', jobsCompleted: 51, latencyMs: 320 },
+        { id: 'Worker-03', role: 'RecoverX AI Decision Engine', status: 'RUNNING', currentCaseId: cases[1]?.id || 'pay_02', jobsCompleted: 51, latencyMs: 320 },
         { id: 'Worker-04', role: 'Safety Boundary & Tool Executor', status: 'IDLE', currentCaseId: null, jobsCompleted: 29, latencyMs: 195 },
         { id: 'Worker-05', role: 'Razorpay Auto-Reconciliation', status: 'COMPLETED', currentCaseId: null, jobsCompleted: 64, latencyMs: 140 },
       ]);
@@ -101,7 +101,7 @@ export const AIOperationsTab: React.FC<AIOperationsTabProps> = ({ apiBase, cases
           <div className="text-2xl font-black text-[#38bdf8] font-mono mt-1">
             209ms
           </div>
-          <span className="text-[10px] text-[#38bdf8] font-mono block mt-1">Groq LLM response speed</span>
+          <span className="text-[10px] text-[#38bdf8] font-mono block mt-1">RecoverX Agent response speed</span>
         </div>
 
         <div className="bg-[#0c0d18] border border-[#1a1c30] p-5 rounded-xl shadow-lg">

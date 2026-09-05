@@ -367,7 +367,7 @@ export const Analytics: React.FC<AnalyticsProps> = ({ apiBase }) => {
       {/* Row 3: AI Strategy Selection Horizontal Bar Chart */}
       <div className="bg-[#0d1322] border border-[#1e293b] p-6 rounded-xl shadow-lg">
         <h3 className="text-xs font-mono font-black text-white uppercase tracking-wider mb-4">
-          GROQ AI RECOVERY STRATEGY SELECTION
+          RECOVERX AI RECOVERY STRATEGY SELECTION
         </h3>
 
         <div className="h-56 w-full">
