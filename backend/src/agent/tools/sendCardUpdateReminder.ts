@@ -11,12 +11,13 @@ interface ReminderResult {
 
 export async function sendCardUpdateReminder(
   caseRecord: { id: string },
-  customer: { email: string; phone?: string | null },
+  customer: { name?: string; email: string; phone?: string | null },
   messageText: string,
   preferredChannel: 'EMAIL' | 'SMS' | 'WHATSAPP' = 'EMAIL'
 ): Promise<ReminderResult> {
   const recipient = (preferredChannel === 'EMAIL' ? customer.email : customer.phone) || customer.email || '+15005550006';
-
+  const greeting = customer.name ? `Hello ${customer.name},\n\n` : '';
+  const fullBody = `${greeting}${messageText}\n\nRegards,\nRecoverXAI Team`;
 
   const provider = ProviderFactory.getProvider(preferredChannel);
 
@@ -24,8 +25,8 @@ export async function sendCardUpdateReminder(
     caseId: caseRecord.id,
     recipient: recipient!,
     channel: preferredChannel,
-    subject: 'Card Update Reminder',
-    bodyText: messageText,
+    subject: 'Action Required: Card Update Reminder — RecoverXAI',
+    bodyText: fullBody,
   });
 
 

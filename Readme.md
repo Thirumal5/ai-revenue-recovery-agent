@@ -4,15 +4,60 @@ An event-driven platform designed for the Razorpay Buildathon to automatically r
 
 ---
 
-## 🚀 Progress Summary (Phases 1 – 11 Complete)
+> [!NOTE]
+> **DEMO ENVIRONMENT DISCLAIMER**  
+> *This demo uses synthetic test customers and Razorpay Test Mode. Payment webhook processing is real within the configured test environment; no production customer or production payment is used.*
 
-RecoverXAI is an end-to-end, production-ready AI Revenue Recovery Agent featuring an event processor, deterministic safety boundaries, LLM reasoning engine (Groq GPT-OSS-120B), real Razorpay test-mode tool execution & HMAC-SHA256 verified payment reconciliation, provider-based communication architecture (Email, SMS, WhatsApp), background autonomous scheduler, real-time analytics dashboard, and a 100% verified test suite across 95+ test assertions.
+---
+
+## 🚀 Progress Summary (Phases 1 – 14 Complete)
+
+RecoverXAI is an end-to-end, production-ready AI Revenue Recovery Agent featuring an event processor, deterministic safety boundaries, LLM reasoning engine (Groq GPT-OSS-120B), real Razorpay test-mode tool execution & HMAC-SHA256 verified payment reconciliation, provider-based communication architecture (Email, SMS, WhatsApp), background autonomous scheduler, merchant-facing Recovery Playground dashboard, dev-only demo reset, and a 100% verified test suite across all project phases.
 
 ---
 
 ### Phase & Feature Breakdown
 
-#### 🟢 Phase 11: Provider-Based Communication Architecture & Razorpay Webhook Reconciliation
+#### 🟢 Phase 14: Production Demo UX, Real Communication Readiness & Resend Email Provider
+- **Resend Email Integration**: Real email transport implemented via official `resend` Node SDK (`ResendProvider`).
+- **Canonical Provider Attribution**: `RESEND` canonical provider attribution in `MessageLog` and UI (`Provider: RESEND`).
+- **Explicit Delivery Status**: API request acceptance records `deliveryStatus = 'SENT'` (never displays `DELIVERED` without webhook confirmation).
+- **Merchant Recovery Playground**: Dedicated controlled entry point for merchant demonstrations.
+- **Explicit Test Customer Labeling**: All synthetic profiles clearly tagged as `TEST CUSTOMER` to ensure clarity.
+- **Editable Recovery Amount**: Default ₹1,000 editable amount input for recovery case creation.
+- **Authoritative 11-Step Lifecycle Timeline**: Derived directly from database actions (`EVENT_RECEIVED` $\rightarrow$ `RECOVERED`).
+- **Razorpay Test Mode Verification Card**: Direct interaction with real Razorpay Test Mode checkout link (`https://rzp.io/...`) and HMAC-SHA256 signature verification status.
+- **Communication Attribution**: Explicit distinction between `SIMULATED` ("Email Simulation Recorded") and `REAL` provider delivery (`Provider: RESEND`).
+- **Sanitized Webhook Inspection**: Sanitized metadata view (*Event*, *Signature: VERIFIED*, *Event ID*, *Payment ID*, *Case ID*, *Timestamp*).
+- **Development-Only Demo Reset**: Safe `POST /api/demo/reset` endpoint and UI button protected by `NODE_ENV !== 'production'`.
+- **Automated Test Suite (`src/agent/testPhase14.ts`)**: 100% passing test suite verifying startup customer isolation, synthetic customer validation, payment link creation, fail-closed HMAC signature verification, Resend provider integration, webhook reconciliation, and phase regressions.
+
+---
+
+## 📧 REAL EMAIL — RESEND
+
+RecoverXAI supports REAL email delivery through **Resend** using the official `@resend` SDK.
+
+`COMMUNICATION_MODE=SIMULATED` remains the default for safe local development and demonstrations.
+
+### Enabling REAL Mode:
+To enable real email dispatch for demonstrations:
+1. Update `backend/.env`:
+   ```env
+   COMMUNICATION_MODE=REAL
+   RESEND_API_KEY=your_resend_api_key_here
+   RESEND_FROM_EMAIL=onboarding@resend.dev  # or your verified sender domain in Resend
+   RESEND_FROM_NAME=RecoverXAI
+   ```
+2. SMS and WhatsApp remain provider-based (`SIMULATED` by default).
+
+> [!IMPORTANT]
+> **TEST MODE BOUNDARIES**  
+> - Razorpay operates in **TEST MODE**.  
+> - Customers created in the demo are synthetic test profiles.  
+> - No production customer data or production payment credentials are used or exposed.
+
+#### 🟢 Phase 11 – 13: Provider Communication Architecture, Razorpay Webhooks & Agent Hardening
 - **Provider Architecture (`src/agent/providers/`)**: Decoupled messaging engine defining `ICommunicationProvider` and supported by `ProviderFactory` supporting `SIMULATED` and `REAL` (`SendGrid` and `Twilio`) modes based on `COMMUNICATION_MODE`.
 - **Multi-Channel Dispatch**: Support for `EMAIL`, `SMS`, and `WHATSAPP` channels with database delivery logging in `MessageLog`.
 - **Razorpay Webhook Verification (`POST /webhooks/razorpay`)**: Ingests `payment.captured`, `payment_link.paid`, and `order.paid` events. Strict fail-closed HMAC-SHA256 signature verification (HTTP 503 if secret missing, HTTP 401 if signature invalid).

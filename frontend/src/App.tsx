@@ -1,22 +1,20 @@
 import React, { useEffect, useState } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { Navbar } from './components/Navbar';
-import { KPICards } from './components/KPICards';
-import { AgentStatus } from './components/AgentStatus';
-import { RecoveryFunnel } from './components/RecoveryFunnel';
-import { Simulator } from './components/Simulator';
-import { RecoveryCasesTable } from './components/RecoveryCasesTable';
 import type { RecoveryCase } from './components/RecoveryCasesTable';
 import { AgentExecutionDrawer } from './components/AgentExecutionDrawer';
-import { ActivityFeed } from './components/ActivityFeed';
-import { Customers } from './components/Customers';
 import { Analytics } from './components/Analytics';
 import { Settings } from './components/Settings';
+import { OverviewTab } from './components/OverviewTab';
+import { RecoveryTab } from './components/RecoveryTab';
+import { AIOperationsTab } from './components/AIOperationsTab';
+import type { TabType } from './components/Sidebar';
 
 const API_BASE = 'http://localhost:3001';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'overview' | 'cases' | 'activity' | 'customers' | 'analytics' | 'settings'>('overview');
+  const [activeTab, setActiveTab] = useState<TabType>('overview');
+
   const [health, setHealth] = useState<string>('Checking backend...');
   const [cases, setCases] = useState<RecoveryCase[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
@@ -101,7 +99,7 @@ export default function App() {
       const data = await response.json();
       if (response.ok && data.caseId) {
         await fetchCases();
-        pollCaseProgress(data.caseId);
+        await pollCaseProgress(data.caseId);
       } else {
         alert(`Error from backend: ${data.error}`);
       }
@@ -137,79 +135,71 @@ export default function App() {
   const selectedCase = cases.find((c) => c.id === selectedCaseId) || null;
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] text-slate-950 flex antialiased font-sans">
+    <div className="h-screen bg-[#060913] text-slate-300 flex antialiased font-sans overflow-hidden relative">
+      {/* Global Dark Spatial Background */}
+      <div className="fixed inset-0 pointer-events-none z-0">
+        <div className="absolute top-[-20%] left-[20%] w-[50vw] h-[50vh] bg-purple-900/10 blur-[120px] rounded-full mix-blend-screen opacity-50" />
+      </div>
+
       {/* Left Sidebar */}
       <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} health={health} />
 
       {/* Main Content Workspace */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden relative z-10">
         <Navbar activeTab={activeTab} setActiveTab={setActiveTab} health={health} cases={cases} />
 
-        <main className="p-8 max-w-[1400px] w-full mx-auto overflow-y-auto">
-          {/* Tab 1: Overview */}
+        <main className="flex-1 p-6 md:p-8 max-w-[1400px] w-full mx-auto overflow-y-auto">
+          {/* Tab 1: Overview Command Center */}
           {activeTab === 'overview' && (
-            <>
-              <KPICards cases={cases} />
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-                <AgentStatus
-                  totalCasesProcessed={cases.length}
-                  lastActivityTime={cases.length > 0 ? cases[0].createdAt : undefined}
-                />
-                <RecoveryFunnel cases={cases} />
-              </div>
-              <Simulator onTrigger={triggerSimulator} isSimulating={isSimulating} />
-              <RecoveryCasesTable
-                cases={cases}
-                loading={loading}
-                selectedCaseId={selectedCaseId}
-                processingCaseId={processingCaseId}
-                onSelectCase={(id) => setSelectedCaseId(id)}
-                onRunAgent={runAgentManually}
-                onRefresh={fetchCases}
-              />
-            </>
+            <OverviewTab
+              cases={cases}
+              processingCaseId={processingCaseId}
+              onSelectCase={(id) => setSelectedCaseId(id)}
+              onNavigateToRecovery={() => setActiveTab('recovery')}
+              onNavigateToAIOps={() => setActiveTab('ai_ops')}
+            />
           )}
 
-          {/* Tab 2: Recovery Cases */}
-          {activeTab === 'cases' && (
-            <>
-              <Simulator onTrigger={triggerSimulator} isSimulating={isSimulating} />
-              <RecoveryCasesTable
-                cases={cases}
-                loading={loading}
-                selectedCaseId={selectedCaseId}
-                processingCaseId={processingCaseId}
-                onSelectCase={(id) => setSelectedCaseId(id)}
-                onRunAgent={runAgentManually}
-                onRefresh={fetchCases}
-              />
-            </>
+          {/* Tab 2: Recovery Management */}
+          {activeTab === 'recovery' && (
+            <RecoveryTab
+              apiBase={API_BASE}
+              cases={cases}
+              loading={loading}
+              selectedCaseId={selectedCaseId}
+              processingCaseId={processingCaseId}
+              onSelectCase={(id) => setSelectedCaseId(id)}
+              onRunAgent={runAgentManually}
+              onRefresh={fetchCases}
+              onRunSimulation={triggerSimulator}
+              isSimulating={isSimulating}
+            />
           )}
 
-          {/* Tab 3: Agent Activity */}
-          {activeTab === 'activity' && (
-            <ActivityFeed cases={cases} />
+          {/* Tab 3: AI Operations & Worker Pool */}
+          {activeTab === 'ai_ops' && (
+            <AIOperationsTab
+              apiBase={API_BASE}
+              cases={cases}
+              onSelectCase={(id) => setSelectedCaseId(id)}
+            />
           )}
 
-          {/* Tab 4: Customers */}
-          {activeTab === 'customers' && (
-            <Customers apiBase={API_BASE} onSelectCase={(id) => setSelectedCaseId(id)} />
-          )}
+          {/* Tab 4: Analytics */}
+          {activeTab === 'analytics' && <Analytics apiBase={API_BASE} />}
 
-          {/* Tab 5: Analytics */}
-          {activeTab === 'analytics' && (
-            <Analytics apiBase={API_BASE} />
-          )}
-
-          {/* Tab 6: Settings */}
-          {activeTab === 'settings' && (
-            <Settings apiBase={API_BASE} />
-          )}
+          {/* Tab 5: Settings */}
+          {activeTab === 'settings' && <Settings apiBase={API_BASE} />}
         </main>
       </div>
 
-      {/* Execution Trace Drawer (Slide-Over) */}
-      <AgentExecutionDrawer recoveryCase={selectedCase} onClose={() => setSelectedCaseId(null)} />
+      {/* Case Detail Slide-over Drawer */}
+      <AgentExecutionDrawer
+        caseRecord={selectedCase}
+        onClose={() => setSelectedCaseId(null)}
+        onRunAgent={runAgentManually}
+        isProcessing={Boolean(processingCaseId && processingCaseId === selectedCaseId)}
+      />
     </div>
   );
 }

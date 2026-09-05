@@ -54,7 +54,8 @@ export async function executeTool(
 
   switch (chosenAction) {
     case 'SEND_PAYMENT_LINK': {
-      const res = await sendPaymentLink(caseRecord, customer);
+      const customMsg = aiDecision.customer_message || undefined;
+      const res = await sendPaymentLink(caseRecord, customer, customMsg);
       return {
         success: res.success,
         tool: 'SEND_PAYMENT_LINK',
@@ -67,21 +68,27 @@ export async function executeTool(
 
     case 'SEND_CARD_UPDATE_REMINDER': {
       const msg = aiDecision.customer_message || 'Please update your card details to continue your subscription.';
-      const res = await sendCardUpdateReminder({ id: caseRecord.id }, customer, msg, 'EMAIL');
+      const res = await sendPaymentLink(caseRecord, customer, msg);
       return {
         success: res.success,
         tool: 'SEND_CARD_UPDATE_REMINDER',
-        message: res.messageContent,
+        paymentLinkId: res.paymentLinkId,
+        paymentLinkUrl: res.paymentLinkUrl,
+        message: res.message || 'Card update reminder dispatched with payment link',
+        error: res.error,
       };
     }
 
     case 'SEND_REMINDER': {
       const msg = aiDecision.customer_message || 'This is a friendly reminder regarding your pending payment.';
-      const res = await sendReminder({ id: caseRecord.id }, customer, msg, 'EMAIL');
+      const res = await sendPaymentLink(caseRecord, customer, msg);
       return {
         success: res.success,
         tool: 'SEND_REMINDER',
-        message: res.messageContent,
+        paymentLinkId: res.paymentLinkId,
+        paymentLinkUrl: res.paymentLinkUrl,
+        message: res.message || 'Payment reminder dispatched with payment link',
+        error: res.error,
       };
     }
 
@@ -89,11 +96,14 @@ export async function executeTool(
       const msg =
         aiDecision.customer_message ||
         'Your payment could not be completed with the current payment method. Please try another available payment method.';
-      const res = await suggestAlternativePayment({ id: caseRecord.id }, customer, msg, 'EMAIL');
+      const res = await sendPaymentLink(caseRecord, customer, msg);
       return {
         success: res.success,
         tool: 'SUGGEST_ALTERNATIVE_PAYMENT',
-        message: res.messageContent,
+        paymentLinkId: res.paymentLinkId,
+        paymentLinkUrl: res.paymentLinkUrl,
+        message: res.message || 'Alternative payment suggestion dispatched with payment link',
+        error: res.error,
       };
     }
 

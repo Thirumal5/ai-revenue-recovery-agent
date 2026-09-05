@@ -7,7 +7,7 @@
 
 import { ICommunicationProvider } from './ICommunicationProvider';
 import { SimulatedProvider } from './simulatedProvider';
-import { SendGridProvider } from './sendgridProvider';
+import { ResendProvider } from './resendProvider';
 import { TwilioProvider } from './twilioProvider';
 
 export class ProviderFactory {
@@ -16,7 +16,7 @@ export class ProviderFactory {
 
     if (mode === 'REAL') {
       if (channel === 'EMAIL') {
-        return new SendGridProvider();
+        return new ResendProvider();
       }
       if (channel === 'SMS' || channel === 'WHATSAPP') {
         return new TwilioProvider();

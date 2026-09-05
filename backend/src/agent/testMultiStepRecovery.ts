@@ -35,6 +35,7 @@ async function runMultiStepTestSuite() {
   console.log('==================================================\n');
 
   // Clean test database
+  await prisma.messageLog.deleteMany({});
   await prisma.agentAction.deleteMany({});
   await prisma.recoveryCase.deleteMany({});
 

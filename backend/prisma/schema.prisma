@@ -11,6 +11,7 @@ model Customer {
   email         String         @unique
   name          String
   phone         String?
+  language      String         @default("English") // "English", "Hinglish", "Hindi"
   emailOptOut   Boolean        @default(false)
   smsOptOut     Boolean        @default(false)
   whatsappOptOut Boolean       @default(false)
@@ -32,7 +33,18 @@ model RecoveryCase {
   lastObservedAt        DateTime?     // Phase 8: Timestamp of last autonomous observation
   observationOutcome    String?       // Phase 8: "RECOVERED", "STILL_OPEN", "ACTION_FAILED", "MAX_ATTEMPTS_REACHED", "WAITING", "TERMINAL"
   lockedForProcessing   Boolean       @default(false)
+  isSimulation          Boolean       @default(false) // Phase 16: Separate simulation batch cases from real merchant cases
+  promiseToPayAt        DateTime?     // Phase 16: Promise to Pay timestamp
+  promiseToPayStatus    String?       @default("NONE") // "NONE", "PROMISED", "FULFILLED", "MISSED", "CANCELLED"
+  language              String        @default("English") // "English", "Hinglish", "Hindi"
+  agentId               String?       // Multi-Agent Worker assignment: "Agent-01", "Agent-02", etc.
+  agentStatus           String?       // Worker status on case: "QUEUED", "ASSIGNED", "PROCESSING", "WAITING", "RELEASED"
+  claimedAt             DateTime?     // When worker claimed the case
+  releasedAt            DateTime?     // When worker released the case
   razorpayPaymentLinkId String?       // Stores real Razorpay link ID when created
+  razorpayPaymentId     String?       // Actual payment ID (pay_...) from verification
+  verificationMethod    String?       // "RAZORPAY_API_TEST", "RAZORPAY_WEBHOOK"
+  verifiedAt            DateTime?     // When the payment was officially confirmed
   actions               AgentAction[]
   messages              MessageLog[]
   createdAt             DateTime      @default(now())
@@ -43,6 +55,7 @@ model AgentAction {
   id             String       @id @default(uuid())
   caseId         String
   case           RecoveryCase @relation(fields: [caseId], references: [id])
+  agentId        String?      // Multi-Agent worker identification
   actionType     String       // "EVENT_CLASSIFIED", "AI_DECISION", "SAFETY_CHECK", "TOOL_EXECUTED", "OBSERVATION"
   aiReasoning    String       // e.g., "Customer needs time to top up account"
   status         String       // "SUCCESS", "FAILED", "BLOCKED"

@@ -10,7 +10,7 @@ export interface SuggestAlternativePaymentResult {
 
 export async function suggestAlternativePayment(
   caseRecord: { id: string },
-  customer: { email: string; phone?: string | null },
+  customer: { name?: string; email: string; phone?: string | null },
   customMessage?: string,
   preferredChannel: 'EMAIL' | 'SMS' | 'WHATSAPP' = 'EMAIL'
 ): Promise<SuggestAlternativePaymentResult> {
@@ -19,7 +19,8 @@ export async function suggestAlternativePayment(
     'Your payment could not be completed with the current payment method. You can try using an alternative payment method (e.g., UPI, Netbanking, or another card) to complete your transaction.';
 
   const recipient = (preferredChannel === 'EMAIL' ? customer.email : customer.phone) || customer.email || '+15005550006';
-
+  const greeting = customer.name ? `Hello ${customer.name},\n\n` : '';
+  const fullBody = `${greeting}${messageContent}\n\nRegards,\nRecoverXAI Team`;
 
   const provider = ProviderFactory.getProvider(preferredChannel);
 
@@ -27,8 +28,8 @@ export async function suggestAlternativePayment(
     caseId: caseRecord.id,
     recipient: recipient!,
     channel: preferredChannel,
-    subject: 'Alternative Payment Method Suggestion',
-    bodyText: messageContent,
+    subject: 'Alternative Payment Options — RecoverXAI',
+    bodyText: fullBody,
   });
 
 

@@ -20,6 +20,7 @@ export interface CaseContext {
   promiseStatus: string;
   allowedActions: string[];
   previousObservation?: string;
+  language?: string; // "English", "Hinglish", "Hindi"
 }
 
 export interface AIDecision {
@@ -29,40 +30,50 @@ export interface AIDecision {
   customer_message: string | null;
 }
 
-const SYSTEM_PROMPT = `You are the decision-making component inside a Revenue Recovery Agent for a fintech platform. Your ONLY job is to choose ONE recovery action from a provided list of allowed actions, and draft a short customer-facing message if the chosen action requires one.
+const SYSTEM_PROMPT = `You are a warm, highly empathetic, and professional Revenue Recovery Specialist at RecoverXAI. Your goal is to help customers resolve failed payments smoothly, respectfully, and effortlessly.
 
-STRICT RULES YOU MUST FOLLOW:
+STRICT HUMAN-CENTRIC WRITING & DECISION RULES:
 1. You may ONLY choose an action from the "allowed_actions" list given to you. Never invent a new action or suggest anything outside that list.
-2. You do not decide whether an action is safe to execute — a separate rules engine will check that. Your job is only to pick the best-fit action for the situation described.
-3. Learn from prior actions and previous observation outcomes. If a prior action (e.g. SEND_PAYMENT_LINK) was already executed and the case remains STILL_OPEN, do NOT repeat that exact same action if another safe recovery action (e.g. SEND_REMINDER or SUGGEST_ALTERNATIVE_PAYMENT) is available in allowed_actions. Diversify the recovery strategy before resorting to ESCALATE_TO_HUMAN.
-4. If the context given to you is unclear, contradictory, or you are not confident any listed action is appropriate, you MUST choose "ESCALATE_TO_HUMAN" (or "CLOSE_NO_ACTION" if allowed for cart abandonment) instead of guessing.
-5. Never draft a message that threatens the customer, implies legal action, promises a discount/refund, or uses urgent/aggressive language.
-6. Draft empathetic, clear, and action-oriented messages tailored to the failure reason (e.g. for insufficient funds, suggest retrying or using an alternative payment method; for card expired, prompt updating card details).
-7. You must respond with ONLY a single valid JSON object, matching exactly the schema below. No explanation text outside the JSON. No markdown code fences.
+2. WRITING STYLE — 100% HUMAN & PERSUASIVE: Write clear, flawless, warm, and natural text. Avoid cold, robotic, AI-like template phrasing, stiff corporate jargon, or robotic bullet points.
+3. MULTILINGUAL COMMUNICATION MODE:
+   - If language is 'English': Write warm, natural, human English.
+   - If language is 'Hinglish': Write natural, polite conversational Hindi using Latin/English script (e.g., "Hi Rahul, aapka payment complete nahi ho paya. Aap neeche diye gaye secure link se dobara try kar sakte hain.").
+   - If language is 'Hindi': Write polite, elegant Hindi using standard Devanagari script (e.g., "नमस्ते राहुल, आपका हाल का भुगतान पूरा नहीं हो पाया...").
+4. EMPATHETIC & ATTRACTIVE: Address the customer directly with a genuine human tone. Understand that payment glitches happen (e.g. temporary bank network timeout, expired card, or busy schedule). Offer help gently so they feel valued, respected, and motivated to complete their payment right away.
+5. TAILORED MESSAGING BASED ON FAILURE REASON:
+   - For Insufficient Funds / Bank Errors: Be reassuring. Gently invite them to retry their payment with a single click.
+   - For Card Expired / Declined: Politely assist them in updating their card or choosing an alternate payment option (UPI/Netbanking) so their service remains active without interruption.
+   - For Reminders: Provide a friendly, courteous check-in that makes paying convenient and hassle-free.
+   - For Alternative Payment Methods: Suggest UPI, Net Banking, or credit/debit cards smoothly.
+6. NEVER use aggressive, threatening, or overly pushy language. Never promise unauthorized discounts. Keep it elegant, trustworthy, and customer-first.
+7. Learn from prior actions and previous observation outcomes. If a prior action was tried and the case remains open, select a different allowed strategy before resorting to ESCALATE_TO_HUMAN.
+8. Respond ONLY with a single valid JSON object per the schema below.
 
 RESPONSE SCHEMA:
 {
   "chosen_action": "<one of the allowed_actions given to you, exactly as spelled>",
   "confidence": "<high | medium | low>",
   "reasoning": "<one short sentence explaining why this action fits, for the audit log>",
-  "customer_message": "<the drafted message text, or null if the chosen action does not require a message>"
+  "customer_message": "<warm, natural, persuasive human message text starting with a friendly greeting like 'Hi [Customer Name],' or 'Hello,' in the requested language>"
 }`;
 
 function buildUserPrompt(context: CaseContext): string {
-  return `Here is the current case context and history you must decide on:
+  const lang = context.language || 'English';
+  return `Here is the current case context:
 
 case_type: ${context.caseType}
 sub_reason: ${context.subReason}
 amount: ₹${context.amount}
 attempt_count_so_far: ${context.attemptCount}
 days_since_first_event: ${context.daysSinceFirstEvent}
-prior_actions_summary: ${context.priorActionsSummary}
+prior_actions_summary: ${context.priorActionsSummary || 'None'}
 previous_observation_outcome: ${context.previousObservation || 'First attempt - no prior observation'}
 promise_to_pay_status: ${context.promiseStatus}
+target_language: ${lang}
 
 allowed_actions: ${JSON.stringify(context.allowedActions)}
 
-Analyze the failure sub_reason, attempt count, and prior actions. Choose the single best-fit action from allowed_actions for this specific case. If a prior action was already tried and the case remains STILL_OPEN, prefer a DIFFERENT allowed recovery strategy (e.g., SEND_REMINDER or SUGGEST_ALTERNATIVE_PAYMENT) before choosing ESCALATE_TO_HUMAN. Draft an appropriate customer_message if the action contacts the customer. Respond with ONLY the JSON object per the schema in the system prompt.`;
+Analyze the failure sub_reason and case history. Choose the single best-fit action from allowed_actions. Write an exceptionally warm, natural, human-like, and persuasive customer message in ${lang} that makes it effortless for the customer to take action and complete their payment. Respond with ONLY the JSON object per the schema in the system prompt.`;
 }
 
 function getFallbackDecision(context: CaseContext, reasoning: string): AIDecision {

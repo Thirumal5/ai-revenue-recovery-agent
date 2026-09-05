@@ -37,7 +37,7 @@ interface StepLog {
 const TERMINAL_ACTIONS = ['ESCALATE_TO_HUMAN', 'CLOSE_NO_ACTION'];
 const TERMINAL_STATUSES = ['RECOVERED', 'CLOSED_NO_RECOVERY', 'ESCALATED'];
 
-export async function processCase(caseId: string): Promise<ProcessResult> {
+export async function processCase(caseId: string, agentId: string = 'Agent-01'): Promise<ProcessResult> {
   const steps: StepLog[] = [];
 
   // 1. Fetch case record
@@ -121,6 +121,7 @@ export async function processCase(caseId: string): Promise<ProcessResult> {
       await prisma.agentAction.create({
         data: {
           caseId,
+          agentId,
           actionType: 'EVENT_CLASSIFIED',
           aiReasoning: `Classified "${caseRecord.riskReason}" as sub-reason: ${subReason}`,
           status: 'SUCCESS',
@@ -175,9 +176,10 @@ export async function processCase(caseId: string): Promise<ProcessResult> {
       attemptCount: caseRecord.attemptCount,
       daysSinceFirstEvent,
       priorActionsSummary,
-      promiseStatus: 'none',
+      promiseStatus: caseRecord.promiseToPayStatus || 'NONE',
       allowedActions,
       previousObservation: caseRecord.observationOutcome || undefined,
+      language: caseRecord.language || caseRecord.customer?.language || 'English',
     };
 
     const aiDecision = await decideRecoveryAction(context);
@@ -185,6 +187,7 @@ export async function processCase(caseId: string): Promise<ProcessResult> {
     await prisma.agentAction.create({
       data: {
         caseId,
+        agentId,
         actionType: 'AI_DECISION',
         aiReasoning: aiDecision.reasoning,
         status: 'SUCCESS',
@@ -219,6 +222,7 @@ export async function processCase(caseId: string): Promise<ProcessResult> {
     await prisma.agentAction.create({
       data: {
         caseId,
+        agentId,
         actionType: 'SAFETY_CHECK',
         aiReasoning: safetyVerdict.reason,
         status: safetyVerdict.approved ? 'SUCCESS' : 'BLOCKED',
@@ -277,6 +281,7 @@ export async function processCase(caseId: string): Promise<ProcessResult> {
     await prisma.agentAction.create({
       data: {
         caseId,
+        agentId,
         actionType: 'TOOL_EXECUTED',
         aiReasoning: `Executed ${toolResult.tool}: ${toolResult.success ? 'succeeded' : 'failed'}`,
         status: toolResult.success ? 'SUCCESS' : 'FAILED',

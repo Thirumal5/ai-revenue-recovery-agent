@@ -18,6 +18,8 @@ interface CaseForSafety {
   status: string;
   attemptCount?: number;
   type?: string;
+  promiseToPayAt?: Date | null;
+  promiseToPayStatus?: string | null;
   customer?: {
     emailOptOut?: boolean;
     smsOptOut?: boolean;
@@ -72,7 +74,16 @@ export function checkSafetyRules(
     }
   }
 
-  // 4. Attempt Limit Safety Check (Applies ONLY to customer-contact actions)
+  // 4. Promise to Pay Cooldown Protection (Applies ONLY to customer-contact actions)
+  if (CONTACT_ACTIONS.includes(aiDecision.chosen_action) && caseRecord.promiseToPayStatus === 'PROMISED' && caseRecord.promiseToPayAt) {
+    const promiseDate = new Date(caseRecord.promiseToPayAt);
+    if (promiseDate.getTime() > Date.now()) {
+      const remainingHours = Math.ceil((promiseDate.getTime() - Date.now()) / (1000 * 60 * 60));
+      return { approved: false, reason: `active customer promise-to-pay in place (${remainingHours}h remaining until promised date)` };
+    }
+  }
+
+  // 5. Attempt Limit Safety Check (Applies ONLY to customer-contact actions)
   if (CONTACT_ACTIONS.includes(aiDecision.chosen_action) && caseRecord.attemptCount !== undefined && caseRecord.type) {
     const maxAllowed = MAX_CONTACT_ATTEMPTS[caseRecord.type] || 3;
     if (caseRecord.attemptCount >= maxAllowed) {
@@ -80,18 +91,18 @@ export function checkSafetyRules(
     }
   }
 
-  // 5. Terminal Status Check
+  // 6. Terminal Status Check
   if (TERMINAL_STATUSES.includes(caseRecord.status)) {
     return { approved: false, reason: 'case already resolved' };
   }
 
-  // 6. Customer Opt-Out Safety Check
+  // 7. Customer Opt-Out Safety Check
   if (CONTACT_ACTIONS.includes(aiDecision.chosen_action) && caseRecord.customer) {
-    if (caseRecord.customer.emailOptOut || caseRecord.customer.smsOptOut || caseRecord.customer.whatsappOptOut) {
-      // Check if all channels opted out
-      if (caseRecord.customer.emailOptOut && caseRecord.customer.smsOptOut && caseRecord.customer.whatsappOptOut) {
-        return { approved: false, reason: 'customer has opted out of all communication channels' };
-      }
+    if (caseRecord.customer.emailOptOut) {
+      return { approved: false, reason: 'customer has opted out of email communications' };
+    }
+    if (caseRecord.customer.emailOptOut && caseRecord.customer.smsOptOut && caseRecord.customer.whatsappOptOut) {
+      return { approved: false, reason: 'customer has opted out of all communication channels' };
     }
   }
 

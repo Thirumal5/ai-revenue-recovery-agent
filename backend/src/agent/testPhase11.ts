@@ -74,7 +74,7 @@ async function runPhase11Tests() {
     // ------------------------------------------------------------------------
     process.env.COMMUNICATION_MODE = 'REAL';
     const realProvider = ProviderFactory.getProvider('EMAIL');
-    assert(realProvider.constructor.name === 'SendGridProvider', 'ProviderFactory instantiates SendGridProvider in REAL mode');
+    assert(realProvider.constructor.name === 'ResendProvider', 'ProviderFactory instantiates ResendProvider in REAL mode');
 
     // Reset back to SIMULATED mode for remaining tests
     process.env.COMMUNICATION_MODE = 'SIMULATED';

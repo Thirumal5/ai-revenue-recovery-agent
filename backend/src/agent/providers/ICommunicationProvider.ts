@@ -17,7 +17,7 @@ export interface SendMessageRequest {
 
 export interface SendMessageResponse {
   success: boolean;
-  provider: 'SENDGRID' | 'TWILIO_SMS' | 'TWILIO_WHATSAPP' | 'SIMULATED';
+  provider: 'RESEND' | 'SENDGRID' | 'TWILIO_SMS' | 'TWILIO_WHATSAPP' | 'SIMULATED';
   providerMessageId?: string;
   deliveryStatus: 'QUEUED' | 'SENT' | 'DELIVERED' | 'FAILED' | 'BOUNCED';
   error?: string;

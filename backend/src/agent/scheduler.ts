@@ -13,6 +13,7 @@
 
 import { prisma } from '../lib/prisma';
 import { processCase } from './orchestrator';
+import { agentManager } from './agentManager';
 
 let schedulerInterval: NodeJS.Timeout | null = null;
 
@@ -24,7 +25,19 @@ export async function runSchedulerTick(): Promise<void> {
   console.log('🔎 Scheduler checking for eligible recovery cases...');
 
   try {
-    // Query eligible cases: status OPEN, unlocked, and lastContactedAt is null or past cooldownCutoff
+    // Update expired promised cases to MISSED if deadline passed without payment
+    await prisma.recoveryCase.updateMany({
+      where: {
+        status: 'OPEN',
+        promiseToPayStatus: 'PROMISED',
+        promiseToPayAt: { lte: new Date() },
+      },
+      data: {
+        promiseToPayStatus: 'MISSED',
+      },
+    });
+
+    // Query eligible cases: status OPEN, unlocked, lastContactedAt is null or past cooldownCutoff, and not in active future promise
     const eligibleCases = await prisma.recoveryCase.findMany({
       where: {
         status: 'OPEN',
@@ -33,6 +46,10 @@ export async function runSchedulerTick(): Promise<void> {
           { lastContactedAt: null },
           { lastContactedAt: { lte: cooldownCutoff } },
         ],
+        NOT: {
+          promiseToPayStatus: 'PROMISED',
+          promiseToPayAt: { gt: new Date() },
+        },
       },
       select: {
         id: true,
@@ -43,24 +60,17 @@ export async function runSchedulerTick(): Promise<void> {
     });
 
     if (eligibleCases.length > 0) {
-      console.log(`📋 Found ${eligibleCases.length} eligible case(s)`);
+      console.log(`📋 Found ${eligibleCases.length} eligible case(s) for worker pool assignment`);
       
       for (const caseRecord of eligibleCases) {
-        console.log(`⚡ Auto-processing case: ${caseRecord.id}`);
+        console.log(`⚡ Submitting case ${caseRecord.id} to Agent Worker Pool...`);
         try {
-          const res = await processCase(caseRecord.id);
-          if (res.success) {
-            console.log(`✅ Scheduler processing completed: ${caseRecord.id}`);
-          } else {
-            console.log(`❌ Scheduler processing skipped/failed: ${caseRecord.id} (${res.error || 'blocked'})`);
-          }
+          await agentManager.assignCaseToWorker(caseRecord.id);
         } catch (err: any) {
-          console.error(`❌ Scheduler processing failed: ${caseRecord.id}`, err?.message || err);
+          console.error(`❌ Scheduler worker submission failed: ${caseRecord.id}`, err?.message || err);
         }
-        // Small 500ms delay between cases to prevent Groq LLM API rate limits
-        await new Promise((r) => setTimeout(r, 500));
+        await new Promise((r) => setTimeout(r, 200));
       }
-
     }
   } catch (error: any) {
     console.error('❌ Scheduler scan error:', error?.message || error);

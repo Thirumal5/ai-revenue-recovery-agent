@@ -150,7 +150,12 @@ export const Customers: React.FC<CustomersProps> = ({ apiBase, onSelectCase }) =
                   >
                     {/* Customer Info */}
                     <td className="py-4 px-6 whitespace-nowrap">
-                      <div className="font-bold text-slate-950 text-xs">{c.name}</div>
+                      <div className="font-bold text-slate-950 text-xs flex items-center gap-2">
+                        <span>{c.name}</span>
+                        <span className="bg-amber-100 text-amber-800 border border-amber-300 text-[9px] font-black px-1.5 py-0.5 rounded-md uppercase tracking-wider">
+                          TEST CUSTOMER
+                        </span>
+                      </div>
                       <div className="text-[11px] text-slate-400 font-normal">{c.email}</div>
                     </td>
 
