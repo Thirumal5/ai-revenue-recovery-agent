@@ -350,6 +350,18 @@ export const RecoveryTab: React.FC<RecoveryTabProps> = ({
                           </div>
 
                           <div>
+                            <label className="text-[9px] text-slate-500 uppercase block mb-1">Email Address</label>
+                            <input
+                              type="email"
+                              value={item.email}
+                              onChange={(e) => handleManualItemChange(idx, 'email', e.target.value)}
+                              className="w-full bg-[#0c0d18] border border-[#1a1c30] rounded-lg px-2.5 py-1.5 text-[#38bdf8] focus:outline-none focus:border-[#7c3aed]"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
                             <label className="text-[9px] text-slate-500 uppercase block mb-1">Amount (₹)</label>
                             <input
                               type="number"
@@ -358,16 +370,16 @@ export const RecoveryTab: React.FC<RecoveryTabProps> = ({
                               className="w-full bg-[#0c0d18] border border-[#1a1c30] rounded-lg px-2.5 py-1.5 text-amber-400 font-bold focus:outline-none focus:border-[#7c3aed]"
                             />
                           </div>
-                        </div>
 
-                        <div>
-                          <label className="text-[9px] text-slate-500 uppercase block mb-1">Specific Failure Reason</label>
-                          <input
-                            type="text"
-                            value={item.riskReason}
-                            onChange={(e) => handleManualItemChange(idx, 'riskReason', e.target.value)}
-                            className="w-full bg-[#0c0d18] border border-[#1a1c30] rounded-lg px-2.5 py-1.5 text-slate-200 focus:outline-none focus:border-[#7c3aed]"
-                          />
+                          <div>
+                            <label className="text-[9px] text-slate-500 uppercase block mb-1">Specific Failure Reason</label>
+                            <input
+                              type="text"
+                              value={item.riskReason}
+                              onChange={(e) => handleManualItemChange(idx, 'riskReason', e.target.value)}
+                              className="w-full bg-[#0c0d18] border border-[#1a1c30] rounded-lg px-2.5 py-1.5 text-slate-200 focus:outline-none focus:border-[#7c3aed]"
+                            />
+                          </div>
                         </div>
                       </div>
                     ))}
