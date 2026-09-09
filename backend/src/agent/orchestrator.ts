@@ -274,7 +274,11 @@ export async function processCase(caseId: string, agentId: string = 'Agent-01'):
         name: caseRecord.customer.name,
         email: caseRecord.customer.email,
       },
-      aiDecision
+      {
+        ...aiDecision,
+        subReason,
+        riskReason: caseRecord.riskReason,
+      }
     );
 
     // Log the tool execution in AgentAction

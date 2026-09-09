@@ -42,6 +42,46 @@ export interface AIDecisionPayload {
   chosen_action: string;
   customer_message?: string | null;
   reasoning?: string;
+  subReason?: string | null;
+  riskReason?: string | null;
+}
+
+function buildReasonAwareMessage(
+  action: string,
+  aiMessage?: string | null,
+  subReason?: string | null,
+  riskReason?: string | null
+): string {
+  if (aiMessage && aiMessage.trim().length > 10) {
+    return aiMessage;
+  }
+
+  const reasonText = `${subReason || ''} ${riskReason || ''}`.toLowerCase();
+
+  if (reasonText.includes('upi') || reasonText.includes('cap') || reasonText.includes('limit')) {
+    return 'We noticed your bank daily UPI transfer limit was reached for this transaction. You can complete your payment smoothly by using a credit/debit card, netbanking, or retrying via another UPI app.';
+  }
+  if (reasonText.includes('card') || reasonText.includes('expire') || reasonText.includes('decline')) {
+    return 'Your card appears to have expired or was declined by your issuing bank. Please update your card details or try adding a different debit/credit card to keep your account active without interruption.';
+  }
+  if (reasonText.includes('fund') || reasonText.includes('balance') || reasonText.includes('insufficient')) {
+    return 'We noticed a quick hiccup due to insufficient account balance. We have reserved your account access so you can easily top up and complete your payment with a single click.';
+  }
+  if (reasonText.includes('timeout') || reasonText.includes('network') || reasonText.includes('gateway')) {
+    return 'There was a temporary bank gateway server timeout during your transaction. Please retry your payment using our secure 1-click link.';
+  }
+  if (reasonText.includes('invoice') || reasonText.includes('overdue') || reasonText.includes('due')) {
+    return 'This is a friendly reminder that your invoice payment is currently overdue. Please use the secure link below to complete your payment.';
+  }
+
+  if (action === 'SEND_CARD_UPDATE_REMINDER') {
+    return 'Please update your card details or try adding a different card to resume your service without interruption.';
+  }
+  if (action === 'SUGGEST_ALTERNATIVE_PAYMENT') {
+    return 'Your payment could not be completed with the primary payment method. Please try using netbanking, UPI, or a different debit/credit card.';
+  }
+
+  return 'We noticed your recent payment could not be completed. Please review and complete your payment using our secure link below.';
 }
 
 export async function executeTool(
@@ -51,11 +91,16 @@ export async function executeTool(
   aiDecision: AIDecisionPayload
 ): Promise<ToolExecutionResult> {
   console.log(`🛠️ Tool Dispatcher executing registered tool: "${chosenAction}"`);
+  const finalMessage = buildReasonAwareMessage(
+    chosenAction,
+    aiDecision.customer_message,
+    aiDecision.subReason,
+    aiDecision.riskReason
+  );
 
   switch (chosenAction) {
     case 'SEND_PAYMENT_LINK': {
-      const customMsg = aiDecision.customer_message || undefined;
-      const res = await sendPaymentLink(caseRecord, customer, customMsg);
+      const res = await sendPaymentLink(caseRecord, customer, finalMessage);
       return {
         success: res.success,
         tool: 'SEND_PAYMENT_LINK',
@@ -67,8 +112,7 @@ export async function executeTool(
     }
 
     case 'SEND_CARD_UPDATE_REMINDER': {
-      const msg = aiDecision.customer_message || 'Please update your card details to continue your subscription.';
-      const res = await sendPaymentLink(caseRecord, customer, msg);
+      const res = await sendPaymentLink(caseRecord, customer, finalMessage);
       return {
         success: res.success,
         tool: 'SEND_CARD_UPDATE_REMINDER',
@@ -80,8 +124,7 @@ export async function executeTool(
     }
 
     case 'SEND_REMINDER': {
-      const msg = aiDecision.customer_message || 'This is a friendly reminder regarding your pending payment.';
-      const res = await sendPaymentLink(caseRecord, customer, msg);
+      const res = await sendPaymentLink(caseRecord, customer, finalMessage);
       return {
         success: res.success,
         tool: 'SEND_REMINDER',
@@ -93,10 +136,7 @@ export async function executeTool(
     }
 
     case 'SUGGEST_ALTERNATIVE_PAYMENT': {
-      const msg =
-        aiDecision.customer_message ||
-        'Your payment could not be completed with the current payment method. Please try another available payment method.';
-      const res = await sendPaymentLink(caseRecord, customer, msg);
+      const res = await sendPaymentLink(caseRecord, customer, finalMessage);
       return {
         success: res.success,
         tool: 'SUGGEST_ALTERNATIVE_PAYMENT',

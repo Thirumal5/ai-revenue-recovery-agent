@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';  
 import { Sidebar } from './components/Sidebar';
 import { Navbar } from './components/Navbar';
 import type { RecoveryCase } from './components/RecoveryCasesTable';

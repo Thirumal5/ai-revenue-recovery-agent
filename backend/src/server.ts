@@ -250,9 +250,9 @@ app.post('/api/recovery-cases', async (req, res) => {
     console.log(`   Type: ${caseType} | Amount: ₹${parsedAmount} | Reason: ${reasonText}`);
     console.log(`==================================================\n`);
 
-    // Asynchronously trigger autonomous agent processing pipeline (non-blocking)
-    processCase(recoveryCase.id).catch((err) => {
-      console.error(`⚠️ Playground case auto-processing failed for ${recoveryCase.id}:`, err);
+    // Submit case to worker pool for autonomous processing (non-blocking)
+    agentManager.assignCaseToWorker(recoveryCase.id).catch((err) => {
+      console.error(`⚠️ Playground case worker pool pickup failed for ${recoveryCase.id}:`, err);
     });
 
     res.status(201).json({
@@ -646,10 +646,15 @@ app.post('/api/recovery/batch-simulate', async (req, res) => {
         },
       });
 
-      // Run case through autonomous pipeline
-      await processCase(recCase.id);
       generatedCaseIds.push(recCase.id);
     }
+
+    // Trigger worker pool to pick up queued cases across workers in background
+    setImmediate(() => {
+      agentManager.processNextInQueue().catch((err) => {
+        console.error('⚠️ Autonomous batch worker pickup error:', err);
+      });
+    });
 
     const batchRecords = await prisma.recoveryCase.findMany({
       where: { id: { in: generatedCaseIds } },
