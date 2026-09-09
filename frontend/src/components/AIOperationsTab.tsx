@@ -5,11 +5,16 @@ import { ActivityFeed } from './ActivityFeed';
 
 interface Worker {
   id: string;
-  role: string;
-  status: 'IDLE' | 'RUNNING' | 'COMPLETED' | 'ERROR';
+  role?: string;
+  status: 'FREE' | 'BUSY' | 'PAUSED' | 'ERROR' | 'IDLE' | 'RUNNING' | 'COMPLETED';
   currentCaseId: string | null;
-  jobsCompleted: number;
-  latencyMs: number;
+  currentCustomerName?: string | null;
+  riskReason?: string | null;
+  amountAtRisk?: number | null;
+  currentStep?: string | null;
+  actionsExecuted?: number;
+  jobsCompleted?: number;
+  latencyMs?: number;
 }
 
 interface AIOperationsTabProps {
@@ -23,7 +28,7 @@ export const AIOperationsTab: React.FC<AIOperationsTabProps> = ({ apiBase, cases
 
   useEffect(() => {
     fetchWorkerStatus();
-    const interval = setInterval(fetchWorkerStatus, 3000);
+    const interval = setInterval(fetchWorkerStatus, 2000);
     return () => clearInterval(interval);
   }, []);
 
@@ -32,31 +37,53 @@ export const AIOperationsTab: React.FC<AIOperationsTabProps> = ({ apiBase, cases
       const res = await fetch(`${apiBase}/api/agent-pool/status`);
       if (res.ok) {
         const data = await res.json();
-        if (data.workers) {
+        if (data.workers && Array.isArray(data.workers)) {
           setWorkers(data.workers);
         } else {
           setWorkers([
-            { id: 'Worker-01', role: 'Detection & Event Ingestion', status: 'RUNNING', currentCaseId: cases[0]?.id || 'pay_01', jobsCompleted: 42, latencyMs: 180 },
-            { id: 'Worker-02', role: 'Failure Risk Classifier', status: 'IDLE', currentCaseId: null, jobsCompleted: 37, latencyMs: 210 },
-            { id: 'Worker-03', role: 'RecoverX AI Decision Engine', status: 'RUNNING', currentCaseId: cases[1]?.id || 'pay_02', jobsCompleted: 51, latencyMs: 320 },
-            { id: 'Worker-04', role: 'Safety Boundary & Tool Executor', status: 'IDLE', currentCaseId: null, jobsCompleted: 29, latencyMs: 195 },
-            { id: 'Worker-05', role: 'Razorpay Auto-Reconciliation', status: 'COMPLETED', currentCaseId: null, jobsCompleted: 64, latencyMs: 140 },
+            { id: 'Agent-01', role: 'Detection & Event Ingestion', status: 'BUSY', currentCaseId: cases[0]?.id || 'pay_01', currentCustomerName: 'Rahul Sharma', actionsExecuted: 42, latencyMs: 180 },
+            { id: 'Agent-02', role: 'Failure Risk Classifier', status: 'FREE', currentCaseId: null, actionsExecuted: 37, latencyMs: 210 },
+            { id: 'Agent-03', role: 'RecoverX AI Decision Engine', status: 'BUSY', currentCaseId: cases[1]?.id || 'pay_02', currentCustomerName: 'Priya Patel', actionsExecuted: 51, latencyMs: 320 },
+            { id: 'Agent-04', role: 'Safety Boundary & Tool Executor', status: 'FREE', currentCaseId: null, actionsExecuted: 29, latencyMs: 195 },
+            { id: 'Agent-05', role: 'Razorpay Auto-Reconciliation', status: 'FREE', currentCaseId: null, actionsExecuted: 64, latencyMs: 140 },
           ]);
         }
       }
     } catch (e) {
       setWorkers([
-        { id: 'Worker-01', role: 'Detection & Event Ingestion', status: 'RUNNING', currentCaseId: cases[0]?.id || 'pay_01', jobsCompleted: 42, latencyMs: 180 },
-        { id: 'Worker-02', role: 'Failure Risk Classifier', status: 'IDLE', currentCaseId: null, jobsCompleted: 37, latencyMs: 210 },
-        { id: 'Worker-03', role: 'RecoverX AI Decision Engine', status: 'RUNNING', currentCaseId: cases[1]?.id || 'pay_02', jobsCompleted: 51, latencyMs: 320 },
-        { id: 'Worker-04', role: 'Safety Boundary & Tool Executor', status: 'IDLE', currentCaseId: null, jobsCompleted: 29, latencyMs: 195 },
-        { id: 'Worker-05', role: 'Razorpay Auto-Reconciliation', status: 'COMPLETED', currentCaseId: null, jobsCompleted: 64, latencyMs: 140 },
+        { id: 'Agent-01', role: 'Detection & Event Ingestion', status: 'FREE', currentCaseId: cases[0]?.id || null, actionsExecuted: 42, latencyMs: 180 },
+        { id: 'Agent-02', role: 'Failure Risk Classifier', status: 'FREE', currentCaseId: null, actionsExecuted: 37, latencyMs: 210 },
+        { id: 'Agent-03', role: 'RecoverX AI Decision Engine', status: 'FREE', currentCaseId: null, actionsExecuted: 51, latencyMs: 320 },
+        { id: 'Agent-04', role: 'Safety Boundary & Tool Executor', status: 'FREE', currentCaseId: null, actionsExecuted: 29, latencyMs: 195 },
+        { id: 'Agent-05', role: 'Razorpay Auto-Reconciliation', status: 'FREE', currentCaseId: null, actionsExecuted: 64, latencyMs: 140 },
       ]);
     }
   };
 
-  const activeWorkersCount = workers.filter((w) => w.status === 'RUNNING').length;
-  const totalJobsCompleted = workers.reduce((sum, w) => sum + w.jobsCompleted, 0);
+  const activeWorkersCount = workers.filter((w) => w.status === 'BUSY' || w.status === 'RUNNING').length;
+  const totalJobsCompleted = workers.reduce((sum, w) => sum + (w.actionsExecuted || w.jobsCompleted || 0), 0);
+
+  const getStatusBadge = (status: string) => {
+    if (status === 'BUSY' || status === 'RUNNING') {
+      return (
+        <span className="text-[9px] font-mono font-bold px-2.5 py-0.5 rounded uppercase tracking-wider border bg-[#7c3aed]/20 text-[#a855f7] border-[#7c3aed]/40 animate-pulse">
+          BUSY / PROCESSING
+        </span>
+      );
+    }
+    if (status === 'ERROR') {
+      return (
+        <span className="text-[9px] font-mono font-bold px-2.5 py-0.5 rounded uppercase tracking-wider border bg-rose-500/10 text-rose-400 border-rose-500/20">
+          ERROR
+        </span>
+      );
+    }
+    return (
+      <span className="text-[9px] font-mono font-bold px-2.5 py-0.5 rounded uppercase tracking-wider border bg-emerald-500/10 text-emerald-400 border-emerald-500/20">
+        FREE / IDLE
+      </span>
+    );
+  };
 
   return (
     <div className="space-y-6">
@@ -74,7 +101,7 @@ export const AIOperationsTab: React.FC<AIOperationsTabProps> = ({ apiBase, cases
           className="text-xs font-mono font-bold text-[#a855f7] bg-[#7c3aed]/10 border border-[#7c3aed]/30 px-3.5 py-2 rounded-xl flex items-center gap-1.5 cursor-pointer hover:bg-[#7c3aed]/20 transition-all"
         >
           <RefreshCw className="w-3.5 h-3.5" />
-          <span>Refresh Pool</span>
+          <span>Refresh Pool Status</span>
         </button>
       </div>
 
@@ -163,11 +190,11 @@ export const AIOperationsTab: React.FC<AIOperationsTabProps> = ({ apiBase, cases
           <div className="flex items-center gap-2">
             <Cpu className="w-4 h-4 text-[#a855f7]" />
             <h3 className="text-xs font-mono font-bold text-white uppercase tracking-wider">
-              AGENTMANAGER WORKER POOL STATUS
+              AGENTMANAGER WORKER POOL STATUS ({workers.length} WORKERS)
             </h3>
           </div>
           <span className="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded border border-emerald-500/20 font-bold">
-            5 WORKERS ALLOCATED
+            {activeWorkersCount} ACTIVE / {workers.length} ALLOCATED
           </span>
         </div>
 
@@ -178,8 +205,8 @@ export const AIOperationsTab: React.FC<AIOperationsTabProps> = ({ apiBase, cases
                 <th className="py-3 px-6">Worker ID</th>
                 <th className="py-3 px-4">Workflow Role</th>
                 <th className="py-3 px-4">Status</th>
-                <th className="py-3 px-4">Active Case</th>
-                <th className="py-3 px-4 text-center">Jobs Completed</th>
+                <th className="py-3 px-4">Active Case / Customer</th>
+                <th className="py-3 px-4 text-center">Jobs Executed</th>
                 <th className="py-3 px-6 text-right">Avg Latency</th>
               </tr>
             </thead>
@@ -190,38 +217,33 @@ export const AIOperationsTab: React.FC<AIOperationsTabProps> = ({ apiBase, cases
                     {w.id}
                   </td>
                   <td className="py-3.5 px-4 font-bold text-white whitespace-nowrap">
-                    {w.role}
+                    {w.role || (w.currentStep ? `Step: ${w.currentStep}` : 'Autonomous Recovery Worker')}
                   </td>
                   <td className="py-3.5 px-4 whitespace-nowrap">
-                    <span
-                      className={`text-[9px] font-mono font-bold px-2 py-0.5 rounded uppercase tracking-wider border ${
-                        w.status === 'RUNNING'
-                          ? 'bg-[#7c3aed]/20 text-[#a855f7] border-[#7c3aed]/40 animate-pulse'
-                          : w.status === 'COMPLETED'
-                          ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                          : 'bg-[#121424] text-slate-400 border-slate-700'
-                      }`}
-                    >
-                      {w.status}
-                    </span>
+                    {getStatusBadge(w.status)}
                   </td>
                   <td className="py-3.5 px-4 font-mono text-slate-300 whitespace-nowrap">
                     {w.currentCaseId ? (
-                      <button
-                        onClick={() => onSelectCase(w.currentCaseId!)}
-                        className="text-[#a855f7] hover:underline font-bold"
-                      >
-                        pay_{w.currentCaseId.slice(0, 8)}
-                      </button>
+                      <div className="flex flex-col">
+                        <button
+                          onClick={() => onSelectCase(w.currentCaseId!)}
+                          className="text-[#a855f7] hover:underline font-bold text-left"
+                        >
+                          RCV-{w.currentCaseId.slice(0, 8)}
+                        </button>
+                        {w.currentCustomerName && (
+                          <span className="text-[10px] text-slate-400">{w.currentCustomerName}</span>
+                        )}
+                      </div>
                     ) : (
                       <span className="text-slate-600">—</span>
                     )}
                   </td>
                   <td className="py-3.5 px-4 text-center font-mono font-bold text-white">
-                    {w.jobsCompleted}
+                    {w.actionsExecuted || w.jobsCompleted || 0}
                   </td>
                   <td className="py-3.5 px-6 text-right font-mono text-slate-400">
-                    {w.latencyMs}ms
+                    {w.latencyMs || 209}ms
                   </td>
                 </tr>
               ))}
