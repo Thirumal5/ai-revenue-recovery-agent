@@ -294,7 +294,11 @@ export const RecoveryTab: React.FC<RecoveryTabProps> = ({
                 <h4 className="text-xs font-mono font-bold text-white uppercase px-2">Processed Batch Recovery Cases ({batchCases.length})</h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   {batchCases.map((c: any) => (
-                    <div key={c.id} className="bg-[#070b14] border border-[#1a1c30] p-3.5 rounded-xl flex items-center justify-between text-xs">
+                    <div
+                      key={c.id}
+                      onClick={() => onSelectCase(c.id)}
+                      className="bg-[#070b14] border border-[#1a1c30] hover:border-[#7c3aed]/50 p-3.5 rounded-xl flex items-center justify-between text-xs cursor-pointer transition-colors"
+                    >
                       <div>
                         <div className="font-mono font-bold text-[#a855f7]">RCV-{c.id.slice(0, 8)}</div>
                         <div className="text-slate-300 font-semibold">{c.customer?.name || 'Test Customer'}</div>

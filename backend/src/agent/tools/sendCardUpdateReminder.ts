@@ -16,16 +16,16 @@ export async function sendCardUpdateReminder(
   preferredChannel: 'EMAIL' | 'SMS' | 'WHATSAPP' = 'EMAIL'
 ): Promise<ReminderResult> {
   const recipient = (preferredChannel === 'EMAIL' ? customer.email : customer.phone) || customer.email || '+15005550006';
-  const greeting = customer.name ? `Hello ${customer.name},\n\n` : '';
-  const fullBody = `${greeting}${messageText}\n\nRegards,\nRecoverXAI Team`;
+  const greeting = customer.name ? `Hi ${customer.name},\n\n` : `Hi there,\n\n`;
+  const fullBody = `${greeting}${messageText}\n\nIf you need any help updating your payment details, please feel free to reply directly to this message.\n\nWarm regards,\nRecoverXAI Support Team`;
 
   const provider = ProviderFactory.getProvider(preferredChannel);
 
   const dispatchResult = await provider.send({
     caseId: caseRecord.id,
-    recipient: recipient!,
+    recipient,
     channel: preferredChannel,
-    subject: 'Action Required: Card Update Reminder — RecoverXAI',
+    subject: 'Quick Update: Please Update Your Payment Details — RecoverXAI',
     bodyText: fullBody,
   });
 

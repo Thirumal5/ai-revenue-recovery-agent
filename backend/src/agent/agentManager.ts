@@ -15,6 +15,7 @@ import { processCase } from './orchestrator';
 
 export interface WorkerState {
   id: string;
+  role: string;
   status: 'FREE' | 'BUSY' | 'PAUSED' | 'ERROR';
   currentCaseId: string | null;
   currentCustomerName: string | null;
@@ -35,6 +36,19 @@ export interface PoolStatus {
   queuedCaseIds: string[];
 }
 
+const WORKER_ROLES = [
+  'Detection & Event Ingestion',
+  'Failure Risk Classifier',
+  'RecoverX AI Decision Engine',
+  'Safety Boundary & Tool Executor',
+  'Razorpay Auto-Reconciliation',
+  'Multi-Worker Batch Executor',
+  'Escalation & Safety Manager',
+  'Autonomous Recovery Worker',
+  'Autonomous Recovery Worker',
+  'Autonomous Recovery Worker',
+];
+
 class AgentManager {
   private workers: Map<string, WorkerState> = new Map();
   private maxWorkers: number = 5;
@@ -54,8 +68,10 @@ class AgentManager {
     this.workers.clear();
     for (let i = 1; i <= this.maxWorkers; i++) {
       const id = `Agent-${i.toString().padStart(2, '0')}`;
+      const role = WORKER_ROLES[i - 1] || 'Autonomous Recovery Worker';
       this.workers.set(id, {
         id,
+        role,
         status: 'FREE',
         currentCaseId: null,
         currentCustomerName: null,
@@ -67,6 +83,24 @@ class AgentManager {
       });
     }
     console.log(`🤖 AgentManager initialized with ${this.maxWorkers} worker slots.`);
+    this.syncActionsExecutedFromDb().catch(() => {});
+  }
+
+  public async syncActionsExecutedFromDb() {
+    try {
+      const counts = await prisma.agentAction.groupBy({
+        by: ['agentId'],
+        _count: { id: true },
+      });
+      for (const group of counts) {
+        if (group.agentId && this.workers.has(group.agentId)) {
+          const w = this.workers.get(group.agentId)!;
+          w.actionsExecuted = Math.max(w.actionsExecuted, group._count.id);
+        }
+      }
+    } catch (e) {
+      // Ignore DB initialization errors
+    }
   }
 
   public setMaxWorkers(count: number): number {
@@ -238,32 +272,40 @@ class AgentManager {
   }
 
   /**
-   * Checks queue or DB for next unassigned OPEN case
+   * Checks queue or DB for next unassigned OPEN case and assigns all available free workers
    */
   public async processNextInQueue() {
-    const freeWorker = Array.from(this.workers.values()).find(w => w.status === 'FREE');
-    if (!freeWorker) return;
+    let freeWorker = Array.from(this.workers.values()).find(w => w.status === 'FREE');
+    while (freeWorker) {
+      let nextCaseId: string | undefined = this.queuedCases.shift();
 
-    let nextCaseId: string | undefined = this.queuedCases.shift();
+      if (!nextCaseId) {
+        // Find eligible unassigned OPEN case from DB
+        const nextCase = await prisma.recoveryCase.findFirst({
+          where: {
+            status: 'OPEN',
+            agentId: null,
+            lockedForProcessing: false,
+          },
+          orderBy: { createdAt: 'asc' },
+        });
 
-    if (!nextCaseId) {
-      // Find eligible unassigned OPEN case from DB
-      const nextCase = await prisma.recoveryCase.findFirst({
-        where: {
-          status: 'OPEN',
-          agentId: null,
-          lockedForProcessing: false,
-        },
-        orderBy: { createdAt: 'asc' },
-      });
-
-      if (nextCase) {
-        nextCaseId = nextCase.id;
+        if (nextCase) {
+          nextCaseId = nextCase.id;
+        }
       }
-    }
 
-    if (nextCaseId) {
-      await this.assignCaseToWorker(nextCaseId, freeWorker.id);
+      if (!nextCaseId) {
+        // No unassigned cases left
+        break;
+      }
+
+      const assigned = await this.assignCaseToWorker(nextCaseId, freeWorker.id);
+      if (!assigned) {
+        break;
+      }
+
+      freeWorker = Array.from(this.workers.values()).find(w => w.status === 'FREE');
     }
   }
 
