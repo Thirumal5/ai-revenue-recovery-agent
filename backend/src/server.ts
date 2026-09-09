@@ -691,6 +691,86 @@ app.post('/api/recovery/batch-simulate', async (req, res) => {
   }
 });
 
+// Phase 17: POST /api/recovery/batch-manual - Create Manual Customer Batch (5 or 10 cases)
+app.post('/api/recovery/batch-manual', async (req, res) => {
+  const { items } = req.body;
+
+  if (!items || !Array.isArray(items) || items.length === 0) {
+    res.status(400).json({ error: 'items array is required' });
+    return;
+  }
+
+  try {
+    const generatedCaseIds: string[] = [];
+    const batchTag = `manual_batch_${Date.now()}`;
+
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      const email = item.email ? item.email.trim().toLowerCase() : `cust_manual_${batchTag}_${i}@recoverxai.test`;
+      const name = item.name ? item.name.trim() : `Manual Customer ${i + 1}`;
+      const phone = item.phone || `+9198765${Math.floor(10000 + Math.random() * 89999)}`;
+      const amount = Number(item.amount) || (1500 + i * 250);
+      const scenario = item.scenario || 'payment_failure';
+      const riskReason = item.riskReason || 'Payment failure reported';
+
+      let customer = await prisma.customer.findUnique({ where: { email } });
+      if (!customer) {
+        customer = await prisma.customer.create({
+          data: {
+            name,
+            email,
+            phone,
+          },
+        });
+      }
+
+      const recCase = await prisma.recoveryCase.create({
+        data: {
+          customerId: customer.id,
+          type: scenario,
+          amount,
+          status: 'OPEN',
+          riskReason,
+          subReason: riskReason.toLowerCase().replace(/\s+/g, '_'),
+          isSimulation: true,
+        },
+      });
+
+      generatedCaseIds.push(recCase.id);
+    }
+
+    // Trigger worker pool to pick up queued cases across workers in background
+    setImmediate(() => {
+      agentManager.processNextInQueue().catch((err) => {
+        console.error('⚠️ Manual batch worker pickup error:', err);
+      });
+    });
+
+    const batchRecords = await prisma.recoveryCase.findMany({
+      where: { id: { in: generatedCaseIds } },
+      include: { customer: true, actions: true },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const totalAtRisk = batchRecords.reduce((sum, c) => sum + c.amount, 0);
+
+    res.json({
+      status: 'batch_created',
+      batchId: batchTag,
+      summary: {
+        casesProcessed: batchRecords.length,
+        revenueAtRisk: totalAtRisk,
+        recoveredRevenue: 0,
+        recoveryRate: 0,
+      },
+      cases: batchRecords,
+    });
+  } catch (error: any) {
+    console.error("Manual batch execution failed:", error);
+    res.status(500).json({ error: error?.message || "Manual batch execution failed" });
+  }
+});
+
 // Phase 16: POST /api/recovery-cases/:id/promise-to-pay
 app.post('/api/recovery-cases/:id/promise-to-pay', async (req, res) => {
   const { id } = req.params;
